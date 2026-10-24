@@ -1,0 +1,9 @@
+pydantic>=2.0
+pytest>=7.0
+litellm>=1.0
+pyahocorasick>=2.0
+pyyaml>=5.1
+rich>=13.0.0
+tiktoken>=0.5.0
+pythainlp>=4.0.0
+requests>=2.28.0

@@ -1,0 +1,141 @@
+# ==============================================================================
+# Agentic Translation Framework (ATF) - .gitignore
+# ==============================================================================
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environments & Packaging
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE, OS & Editor Artifacts
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Logs, Crash Dumps & LLM Traces
+*.log
+atf.log
+pipeline_log.txt
+repair_log.txt
+diagnostic_log.txt
+diagnostic_prompt.txt
+crash.txt
+llm_trace.log
+tlas_analyzer_v4.log
+tlas_consensus_engine.log
+logs/
+
+# Game Binaries, Packaged Games & Engines
+Example RPGM Game/
+*.exe
+*.dll
+*.pak
+*.dat
+*.bin
+*.nexe
+*.trans
+*.rpa
+
+# Workspaces & Scratch Folders
+output/
+scratch/
+scratch_*.json
+scratch_*.py
+testing files/
+pixel-agent-desk/
+node_modules/
+
+# Temporary Root Analysis & Experimental Scripts
+auto_resume.py
+auto_run.py
+check.py
+check_dropped.py
+temp_log_reader.py
+temp_prof.py
+test.json
+test_dry_run.py
+test_json.py
+test_script*.rpy
+test_tlas_dry_run.py
+test_validation.py
+test_validator.py
+profile_stats
+qwen_test_output.json
+audit_report.json
+gender_repair_review.csv
+legacy_manual_review_queue.csv
+manual_review_queue.csv
+repaired_manual_review_queue.csv
+patch_conditions.py
+fix_existing_profiles.py
+run.py
+run_pipeline.py
+
+# Game Data & Large CSVs (Keep only template files)
+data/processed_dialogues*.csv
+data/plugins_texts.csv
+data/plugins_texts_*.csv
+!data/plugins_texts.template.csv
+data/delta_glossary_review.csv
+data/harvested_spoken_places.csv
+data/audit/
+data/project_manifest.json
+!data/project_manifest.template.json
+
+# TLAS Runtime Outputs, Caches & Reports
+data/tlas/*.log
+data/tlas/*.bak*
+data/tlas/*.backup*
+data/tlas/*.html
+data/tlas/*audit*.json
+data/tlas/*report*.json
+data/tlas/*queue*.json
+data/tlas/*places*.csv
+data/tlas/*places*.json
+data/tlas/*glossary*.csv
+data/tlas/*stats*
+data/tlas/chatgpt_translation_checkpoint*.json*
+data/tlas/rpgm_scenes_*.json*
+data/tlas/tlas_glossary.json*
+!data/tlas/tlas_glossary.template.json
+data/tlas/global_pronoun_matrix.json*
+!data/tlas/global_pronoun_matrix.template.json
+data/tlas/alias_mapping.json*
+!data/tlas/alias_mapping.template.json
+data/tlas/character_identities.json
+data/tlas/llm_cache.json
+data/tlas/extractions_*/
+data/tlas/timeline_chunks*/
+data/tlas/profiles/*
+!data/tlas/profiles/.gitkeep
+data/tlas/profiles_backup*/

@@ -1,0 +1,184 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TLAS_Character_Profile_v4",
+  "description": "TLAS v4.0 Global-Relational Character Profile Template (No Timeline Dependencies)",
+  "type": "object",
+  "properties": {
+    "character_id": {
+      "type": "string",
+      "example": "CHAR_DAN"
+    },
+    "name": {
+      "type": "string",
+      "example": "Dan"
+    },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "example": ["Dan"]
+    },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "gender": {
+          "type": "string",
+          "enum": ["MALE", "FEMALE", "NON_BINARY", "UNKNOWN"]
+        },
+        "age": {
+          "type": "string",
+          "enum": ["CHILD", "TEEN", "ADULT", "ELDER", "UNKNOWN"]
+        },
+        "species": {
+          "type": "string",
+          "example": "HUMAN"
+        }
+      },
+      "required": ["gender", "age", "species"]
+    },
+    "base_speech_style": {
+      "type": "object",
+      "properties": {
+        "self_pronoun": {
+          "type": "string",
+          "description": "สรรพนามบุรุษที่ 1 พื้นฐาน (เรียกตัวเอง)",
+          "example": "ผม"
+        },
+        "target_pronoun": {
+          "type": "string",
+          "description": "สรรพนามบุรุษที่ 2 พื้นฐาน (เรียกคนอื่น/คนแปลกหน้า)",
+          "example": "คุณ"
+        },
+        "third_person_pronoun": {
+          "type": "string",
+          "description": "สรรพนามบุรุษที่ 3 พื้นฐาน (เรียกบุคคลที่สาม)",
+          "example": "เขา"
+        },
+        "ending_particle": {
+          "type": "string",
+          "description": "คำลงท้าย/หางเสียงพื้นฐาน",
+          "example": "ครับ"
+        },
+        "formality_level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "ระดับความเป็นทางการ (1 = สนิท/หยาบ, 5 = ทางการ/ราชาศัพท์)",
+          "example": 4
+        }
+      },
+      "required": ["self_pronoun", "target_pronoun", "third_person_pronoun", "ending_particle", "formality_level"]
+    },
+    "base_state": {
+      "type": "object",
+      "properties": {
+        "personality": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tag": { "type": "string" },
+              "weight": { "type": "integer", "minimum": 1, "maximum": 100 }
+            },
+            "required": ["tag", "weight"]
+          }
+        },
+        "speech_habit": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tag": { "type": "string" },
+              "weight": { "type": "integer", "minimum": 1, "maximum": 100 }
+            },
+            "required": ["tag", "weight"]
+          }
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "tag": { "type": "string" },
+              "weight": { "type": "integer", "minimum": 1, "maximum": 100 }
+            },
+            "required": ["tag", "weight"]
+          }
+        }
+      },
+      "required": ["personality", "speech_habit", "values"]
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target_character_id": {
+            "type": "string",
+            "example": "CHAR_SHION"
+          },
+          "target_name": {
+            "type": "string",
+            "example": "Shion"
+          },
+          "roles": {
+            "type": "array",
+            "items": { "type": "string" },
+            "example": ["ROLE_SOC_PEER"]
+          },
+          "affinity": {
+            "type": "string",
+            "example": "AFF_FOND"
+          },
+          "intimacy": {
+            "type": "string",
+            "example": "INT_CONFIDANT"
+          },
+          "power_dynamic": {
+            "type": "string",
+            "example": "DYN_EQUAL"
+          },
+          "speech_style": {
+            "type": "object",
+            "properties": {
+              "self_pronoun": {
+                "type": "string",
+                "description": "สรรพนามบุรุษที่ 1 ที่ใช้เรียกตัวเองเมื่อคุยกับ target นี้",
+                "example": "ผม"
+              },
+              "target_pronoun": {
+                "type": "string",
+                "description": "สรรพนามบุรุษที่ 2 ที่ใช้เรียก target นี้",
+                "example": "คุณ"
+              },
+              "third_person_pronoun": {
+                "type": "string",
+                "description": "สรรพนามบุรุษที่ 3 ที่ใช้เรียกผู้อื่นเมื่อสนทนากับ target นี้ หรือเมื่อกล่าวถึง target นี้",
+                "example": "เธอ"
+              },
+              "ending_particle": {
+                "type": "string",
+                "description": "คำลงท้ายที่ใช้กับ target นี้",
+                "example": "ครับ"
+              },
+              "formality_level": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "example": 4
+              },
+              "derivation_rule": {
+                "type": "string",
+                "example": "RULE_PEER_POLITE"
+              }
+            },
+            "required": ["self_pronoun", "target_pronoun", "third_person_pronoun", "ending_particle", "formality_level"]
+          }
+        },
+        "required": ["target_character_id", "target_name", "roles", "affinity", "intimacy", "power_dynamic", "speech_style"]
+      }
+    }
+  },
+  "required": ["character_id", "name", "identity", "base_speech_style", "base_state", "relationships"]
+}

@@ -1,0 +1,481 @@
+# TLAS Volume 1
+
+# Core Taxonomy Specification
+
+## Version 1.0 Draft
+
+---
+
+# 1. Purpose
+
+TLAS Core Taxonomy เป็นมาตรฐานกลางสำหรับการอธิบายลักษณะของตัวละคร บทสนทนา และปัจจัยทางภาษาที่เกี่ยวข้องกับการแปล
+
+Taxonomy นี้ถูกออกแบบเพื่อให้
+
+* AI วิเคราะห์ Character Profile
+* AI วิเคราะห์ Dialogue Metadata
+* AI ตัดสินใจเลือกสรรพนาม
+* AI ตัดสินใจเลือกระดับภาษา
+* AI ตัดสินใจเลือก Honorific
+* AI ตัดสินใจเลือก Vocabulary
+* AI ตัดสินใจเลือก Sentence Style
+
+โดยไม่ผูกติดกับภาษาใดภาษาหนึ่ง
+
+---
+
+# 2. Design Objectives
+
+Taxonomy ต้องมีคุณสมบัติ
+
+## O-001
+
+Machine Readable
+
+---
+
+## O-002
+
+Language Independent
+
+---
+
+## O-003
+
+Extensible
+
+---
+
+## O-004
+
+Backward Compatible
+
+---
+
+## O-005
+
+Version Controlled
+
+---
+
+## O-006
+
+Human Readable
+
+---
+
+## O-007
+
+Deterministic
+
+Tag เดียว
+
+ต้องมีความหมายเดียว
+
+---
+
+## O-008
+
+Reusable
+
+Tag เดียว
+
+ใช้ได้ทุกเกม
+
+---
+
+## O-009
+
+Composable
+
+หนึ่ง Character
+
+สามารถมีหลาย Tag
+
+---
+
+## O-010
+
+Multi-dimensional
+
+หนึ่ง Dialogue
+
+สามารถมีหลายมิติพร้อมกัน
+
+เช่น
+
+* โกรธ
+* เศร้า
+* ประชด
+* รัก
+* เป็นห่วง
+
+พร้อมกันได้
+
+---
+
+# 3. Taxonomy Category
+
+ระบบแบ่งออกเป็น 16 หมวดหลัก
+
+| Code | Category     | Scope                |
+| ---- | ------------ | -------------------- |
+| GND  | Gender       | Character            |
+| AGE  | Age Group    | Character            |
+| SPC  | Species      | Character            |
+| OCC  | Occupation   | Character            |
+| STR  | Story Role   | Character            |
+| PER  | Personality  | Character            |
+| VAL  | Core Values  | Character            |
+| BEL  | Beliefs      | Character            |
+| REL  | Relationship | Character / Dialogue |
+| EMO  | Emotion      | Dialogue             |
+| SIT  | Situation    | Dialogue             |
+| CTX  | Context      | Dialogue             |
+| INT  | Intent       | Dialogue             |
+| TON  | Tone         | Dialogue             |
+| REG  | Register     | Output               |
+| SPR  | Speech Habit | Character            |
+
+---
+
+# 4. Category Classification
+
+ทุก Category ต้องระบุคุณสมบัติ
+
+| Property | Description           |
+| -------- | --------------------- |
+| Static   | เปลี่ยนยาก            |
+| Timeline | เปลี่ยนตามเนื้อเรื่อง |
+| Dynamic  | เปลี่ยนทุก Dialogue   |
+
+ตัวอย่าง
+
+| Category     | Type     |
+| ------------ | -------- |
+| Gender       | Static   |
+| Personality  | Timeline |
+| Relationship | Timeline |
+| Emotion      | Dynamic  |
+| Tone         | Dynamic  |
+| Register     | Dynamic  |
+
+---
+
+# 5. Taxonomy Identifier
+
+ทุก Taxonomy ใช้รูปแบบ
+
+```text
+CATEGORY_SUBCATEGORY_NAME
+```
+
+ตัวอย่าง
+
+```text
+PER_SOC_POLITE
+
+PER_INT_NERD
+
+PER_EMO_COLD
+
+EMO_NEG_ANGER
+
+REL_FAMILY_PARENT
+
+REL_ROMANTIC_LOVER
+
+SIT_BATTLE
+
+CTX_CLASSROOM
+
+TON_SARCASTIC
+
+REG_FORMAL
+```
+
+---
+
+# 6. Naming Convention
+
+ID
+
+ใช้
+
+```text
+UPPER_SNAKE_CASE
+```
+
+Display Name
+
+ใช้ได้ทุกภาษา
+
+ตัวอย่าง
+
+```yaml
+display_name
+
+en: Polite
+
+ja: 丁寧
+
+th: สุภาพ
+```
+
+---
+
+# 7. Taxonomy Schema
+
+ทุก Tag ใช้ Schema เดียวกัน
+
+```yaml
+id:
+
+display_name:
+
+category:
+
+subcategory:
+
+description:
+
+aliases:
+
+related:
+
+opposite:
+
+deprecated:
+
+version:
+```
+
+---
+
+# 8. Category Rules
+
+ทุก Category
+
+ต้องมี
+
+```text
+Category Code
+
+Category Name
+
+Description
+
+Allowed Scope
+
+Timeline Type
+
+Maximum Cardinality
+```
+
+ตัวอย่าง
+
+PER
+
+```yaml
+category_code: PER
+
+scope:
+
+- Character
+
+timeline: Timeline
+
+max_cardinality: 20
+```
+
+---
+
+# 9. Cardinality Rules
+
+เพื่อป้องกัน AI ใส่ Tag มั่ว
+
+กำหนดจำนวนสูงสุด
+
+| Category     | Max       |
+| ------------ | --------- |
+| Personality  | 20        |
+| Emotion      | 8         |
+| Intent       | 5         |
+| Tone         | 5         |
+| Situation    | 5         |
+| Relationship | Unlimited |
+| Speech Habit | 20        |
+
+---
+
+# 10. Annotation Confidence
+
+ทุก Annotation
+
+ต้องมี
+
+```yaml
+confidence
+```
+
+ช่วง
+
+```text
+0.00
+
+↓
+
+1.00
+```
+
+ตัวอย่าง
+
+```yaml
+id: PER_SOC_POLITE
+
+confidence: 0.91
+```
+
+---
+
+# 11. Annotation Evidence
+
+ทุก Annotation
+
+สามารถมี Evidence
+
+```yaml
+evidence:
+
+- Dialogue 53
+
+- Dialogue 61
+
+- Dialogue 80
+```
+
+หรือ
+
+```yaml
+evidence:
+
+- "พูดสุภาพกับทุกคน"
+
+- "ลงท้ายด้วย 'ครับ'"
+
+- "ใช้敬語ตลอด"
+```
+
+---
+
+# 12. Allowed Annotation Sources
+
+Tag ทุกตัว
+
+ต้องระบุว่า
+
+AI อ้างอิงจากอะไรได้บ้าง
+
+เช่น
+
+```yaml
+allowed_sources
+
+- Dialogue
+
+- Character Profile
+
+- Narration
+
+- Story Summary
+
+- Manual Annotation
+```
+
+---
+
+# 13. Version Policy
+
+ใช้ Semantic Version
+
+```text
+1.0.0
+
+1.1.0
+
+2.0.0
+```
+
+---
+
+# 14. Deprecated Policy
+
+Tag ห้ามลบ
+
+ใช้
+
+```yaml
+deprecated: true
+```
+
+แทน
+
+---
+
+# 15. Language Independence
+
+ID
+
+ต้องไม่อ้างอิงภาษา
+
+เช่น
+
+❌
+
+```text
+PER_ผม
+```
+
+❌
+
+```text
+PER_BOKU
+```
+
+✅
+
+```text
+PER_FIRST_PERSON_MASCULINE_FORMAL
+```
+
+หรือถ้ายังไม่ลงถึงระดับนี้
+
+```text
+PRN_FIRST_MASC_FORMAL
+```
+
+แล้วค่อยให้ Mapping Layer แปลงเป็น
+
+* ผม
+* 僕
+* I
+
+ตามภาษาเป้าหมาย
+
+---
+
+# 16. Core Principle
+
+Taxonomy มีหน้าที่เพียง
+
+> **นิยาม "ความหมาย" ของคุณลักษณะทางภาษาและบริบท**
+
+ไม่ใช่
+
+* เก็บข้อมูลตัวละคร
+* เก็บข้อมูล Dialogue
+* เก็บผลลัพธ์การแปล
+
+Taxonomy คือ **Vocabulary มาตรฐาน** ที่ทุกส่วนของ TLAS ใช้อ้างอิงร่วมกัน
+
+---

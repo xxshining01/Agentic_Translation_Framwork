@@ -1,0 +1,62 @@
+# ADR-005: Data Contract and Event Model
+
+**Status:** Proposed
+**Date:** 2026-07-09
+**Decision Maker:** Product Owner + AI Solution Architect
+
+---
+
+## 1. Context and Problem Statement
+
+ในสถาปัตยกรรมแบบ Multi-Agent (ADR-001) และ Pipeline (ADR-002) Agent แต่ละตัวจะไม่ได้คุยกันโดยตรง แต่จะรับ-ส่งข้อมูลผ่านระบบ หากเราอนุญาตให้ Agent โยนข้อความ (Raw Text) หากันแบบสะเปะสะปะ ระบบพังแน่นอน เช่น Translator ส่งคืนมาแค่ประโยคแปล แต่ลืมส่ง ID ของประโยคนั้นกลับมาด้วย ทำให้ Python ไม่รู้ว่าจะเอาประโยคนี้ไปใส่กลับตรงไหนในไฟล์เกม
+
+เราจำเป็นต้องมี "มาตรฐานสัญญาข้อมูล" (Data Contract) เพื่อบังคับให้ทุก Agent และ Python Module พูดภาษาโครงสร้างเดียวกัน
+
+## 2. Decision
+
+เราตัดสินใจใช้ **Standardized JSON Schema (Data Contract)** ในการส่งผ่านข้อมูลระหว่าง Stage โดยจะใช้สถาปัตยกรรมแบบ **Event Payload** ข้อมูลที่วิ่งอยู่ในระบบ (Payload) จะต้องประกอบด้วย 3 ส่วนหลักเสมอ ได้แก่:
+
+1. `Metadata` (ข้อมูลกำกับ: เช่น ID, ชื่อไฟล์, ผู้พูด)
+2. `Context` (ข้อมูลบริบท: เช่น Glossary ที่ต้องใช้, นิสัยตัวละคร)
+3. `Content` (เนื้อหา: เช่น ต้นฉบับ, คำแปล, สถานะ)
+
+### ตัวอย่าง Data Contract (JSON Payload Schema)
+
+```json
+{
+  "id": "line_0042",
+  "speaker": "Aila",
+  "original_text": "I won't let you get away with this!",
+  "current_stage": "editor",
+  "context_fragments": {
+    "character_traits": ["tsundere", "aggressive but caring"],
+    "glossary": []
+  },
+  "translations": {
+    "translator_output": "ฉันจะไม่ปล่อยให้คุณหนีรอดไปกับเรื่องนี้หรอกนะ!",
+    "editor_output": null,
+    "final_output": null
+  },
+  "status": "pending",
+  "errors": []
+}
+
+```
+
+## 3. Rationale
+
+* **Decoupling (การลดการพึ่งพากัน):** Editor Agent ไม่จำเป็นต้องรู้ว่า Translator Agent มีหน้าตาโค้ดอย่างไร มันแค่คาดหวังว่าจะได้รับ JSON ที่มีฟิลด์ `translator_output` เต็มมาแล้ว และมันมีหน้าที่เติมข้อความลงใน `editor_output` เท่านั้น
+* **Traceability (การตรวจสอบย้อนหลัง):** หากเกิดข้อผิดพลาดที่จุดไหน (เช่น Timing Agent ทำพัง) เราสามารถดู JSON Payload ของประโยคนั้นได้ทันทีว่ามันพังที่ `current_stage` ไหน และมี `errors` อะไรถูกบันทึกไว้บ้าง
+* **State Management:** การใช้ JSON ทำให้ Python สามารถจัดเก็บสถานะ (State) ของการแปลลง Database (เช่น SQLite หรือ Supabase) ได้ง่ายดายในอนาคต
+
+## 4. Consequences
+
+**Pros:**
+
+* ระบบมีความแข็งแกร่ง (Robustness) สูงมาก ป้องกันปัญหาข้อมูลหายกลางทาง
+* หากในอนาคตต้องการเพิ่ม Agent ใหม่ (เช่น Censorship Agent ตรวจคำหยาบ) ก็แค่เพิ่มฟิลด์ลงใน JSON โดยไม่กระทบ Agent ตัวเก่า
+
+**Cons:**
+
+* ฝั่ง Python (Context & Assembly Manager) ต้องทำงานหนักในการแปลงผลลัพธ์ของ AI ให้อยู่ในรูป JSON ที่ถูกต้อง (JSON Parsing)
+* ต้องระมัดระวังเรื่อง Token Limit เนื่องจากโครงสร้าง JSON มีวงเล็บและ Key ที่ใช้ Token เพิ่มเติมเมื่อเทียบกับ Raw Text ทั่วไป

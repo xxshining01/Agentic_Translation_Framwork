@@ -1,0 +1,37 @@
+# ADR-010 Smart Token Batching and Routing
+
+Status: Accepted
+Date: 2026-07-12
+Decision Maker: Product Owner + AI Solution Architect
+
+---
+
+## 1. Context and Problem Statement
+
+ในเวอร์ชันก่อนหน้า (V1) การแบ่งข้อมูลเพื่อส่งให้ AI ประมวลผล (Batching) ถูกกำหนดด้วยจำนวนบรรทัด (Row count = 50 บรรทัดต่อ 1 Batch) ซึ่งสร้างปัญหาคอขวดในกรณีที่บรรทัดเหล่านั้นมีความยาวแตกต่างกันมาก เช่น 50 บรรทัดที่เต็มไปด้วยบทสนทนายาวๆ จะใช้เวลาประมวลผลนานกว่า 50 บรรทัดที่เป็นชื่อไอเทมสั้นๆ ทำให้เกิดปัญหา Timeout (600 วินาที) ของ Local LLM หรือ API บ่อยครั้ง
+
+นอกจากนี้ การบังคับให้ทุกข้อความต้องวิ่งผ่าน `TranslatorAgent` ทำให้ข้อความประเภท System UI หรือชื่อ Item สั้นๆ ถูกแปลอย่างผิดเพี้ยนเพราะ AI คิดว่าเป็นประโยคสนทนา ทำให้ต้องเสียเวลาแก้ไขในรอบของ `EditorAgent` อีกต่อหนึ่ง
+
+## 2. Decision
+
+เราตัดสินใจใช้ระบบ **Smart Token Batching** ร่วมกับ **Smart Task Routing**:
+
+1. **Token-based Estimation:** เปลี่ยนการนับ Batch จากจำนวนบรรทัด มาเป็นการคำนวณ Token คร่าวๆ (`จำนวนตัวอักษรภาษาอังกฤษ / 4`)
+2. **Text Classification:** ให้ระบบ Python ช่วยจำแนกประเภทข้อความ (Pre-filtering) ก่อนเข้าสู่ Pipeline ของ AI:
+   - `CODE_ONLY`: ข้อความที่เป็นคำสั่งเกมเพียวๆ (ข้ามการแปล)
+   - `HEAVY`: บทสนทนาที่มีชื่อผู้พูด หรือคำอธิบายยาวๆ
+   - `LIGHT`: ชื่อไอเทม หรือ UI ของระบบ
+3. **Smart Task Routing:**
+   - ชุดข้อมูล `HEAVY` จะถูกจำกัดที่ 150 Tokens และวิ่งผ่าน Pipeline เต็มรูปแบบ (Translator -> Editor -> QA)
+   - ชุดข้อมูล `LIGHT` จะถูกจำกัดที่ 200 Tokens และข้ามขั้นตอน Translator ไปให้ Editor แปลโดยตรง เพื่อลดความซับซ้อน ป้องกันการแปล UI เป็นภาษาเล่าเรื่อง และกระจายโหลดให้โมเดลทั้งสองตัวทำงานพร้อมกันได้ (True Concurrency)
+
+## 3. Consequences
+
+### Positive (ผลดี):
+- แก้ปัญหา Timeout ได้อย่างถาวร เพราะปริมาณงานที่เข้าสู่ LLM จะคงที่และควบคุมได้
+- ป้องกันปัญหา AI Hallucination ในคำศัพท์ UI และ Item Names ได้ 100%
+- เพิ่มประสิทธิภาพในการประมวลผล เพราะ `LIGHT` Batch จะถูกข้ามการทำงานของ Translator ไปเลย
+
+### Negative (ผลเสีย/สิ่งที่ต้องระวัง):
+- ซับซ้อนในการจัดการ State Machine มากขึ้น เนื่องจากต้องมี Transition แบบข้ามขั้นตอน (PENDING -> EDITING)
+- ต้องมีการเตรียม Prompt พิเศษ (Translator Mode) ให้กับ EditorAgent เมื่อต้องรับงานแบบ `LIGHT` Batch

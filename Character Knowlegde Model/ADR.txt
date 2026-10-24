@@ -1,0 +1,307 @@
+# ADR-001 : Time-aware Character Knowledge Model
+
+**Status:** ✅ Accepted
+
+## Decision
+
+Character Knowledge จะใช้โมเดล **Time-aware + Base/Delta** เพื่อรองรับการเปลี่ยนแปลงของตัวละครตามเนื้อเรื่อง โดยหลีกเลี่ยงการคัดลอกข้อมูลทั้งชุดทุกครั้งที่เกิดการเปลี่ยนแปลง
+
+---
+
+## Character Data Model
+
+```text
+Character
+│
+├── Identity (Immutable)
+│
+├── Static Profile (Immutable)
+│
+├── Timeline
+│     │
+│     ├── State 0
+│     ├── State 1
+│     ├── State 2
+│     └── ...
+│
+└── Metadata
+```
+
+---
+
+## Immutable Data
+
+ข้อมูลที่แทบไม่เปลี่ยนตลอดเรื่อง
+
+ตัวอย่าง
+
+* Character ID
+* Primary Name
+* Alias
+* Gender
+* Species
+* Birth Date (ถ้ามี)
+* Physical Traits
+* Initial Metadata
+
+---
+
+## Mutable Data
+
+ข้อมูลที่เปลี่ยนได้ตาม Timeline
+
+* Personality
+* Relationship
+* Speech Profile
+* Speech Habit
+* Belief
+* Core Values
+* Occupation
+* Organization
+* Social Status
+* Goal
+* Mental State
+* Knowledge / Secrets
+* Affection / Trust / Fear
+
+---
+
+# Timeline Model
+
+Timeline ไม่อิง Chapter
+
+Timeline อิง **Story Event**
+
+ตัวอย่าง
+
+```text
+Start
+
+↓
+
+Meet Hero
+
+↓
+
+Become Friends
+
+↓
+
+Betrayal
+
+↓
+
+Reconciliation
+
+↓
+
+Ending
+```
+
+ทุก Event สามารถสร้าง State ใหม่ได้
+
+---
+
+# State Structure
+
+แต่ละ State จะเก็บเฉพาะข้อมูลที่ "เปลี่ยน"
+
+```json
+{
+  "state_id": 3,
+  "trigger_event": "Professor_Betrayed",
+  "overrides": {
+    "relationships": {
+      "Professor": {
+        "trust": 0,
+        "fear": 70,
+        "hatred": 95
+      }
+    }
+  }
+}
+```
+
+---
+
+# Effective Character State
+
+เมื่อ AI ต้องใช้ข้อมูล
+
+จะคำนวณ
+
+```text
+Static Profile
+        +
+Timeline State 0
+        +
+Timeline State 1
+        +
+Timeline State 2
+        =
+Effective Character State
+```
+
+ซึ่งเป็นข้อมูลจริงที่ใช้ในการวิเคราะห์ Dialogue และการตัดสินใจด้านภาษา
+
+---
+
+# Dialogue Metadata Update
+
+Dialogue Metadata ต้องอ้างอิง Character State ที่ใช้งาน
+
+ตัวอย่าง
+
+```json
+{
+  "speaker": "miku",
+  "speaker_state": 2,
+  "listener": "professor",
+  "listener_state": 5
+}
+```
+
+ดังนั้น AI จะรู้ว่าตัวละครแต่ละตัวอยู่ในสถานะใดของเนื้อเรื่อง ณ เวลาที่พูด
+
+---
+
+# Relationship Update
+
+Relationship ไม่เป็นค่าคงที่อีกต่อไป
+
+แต่เป็นข้อมูลที่เปลี่ยนตาม State
+
+```text
+Professor
+
+State 0
+Trust = 90
+
+↓
+
+State 1
+Trust = 60
+
+↓
+
+State 2
+Trust = 10
+Hatred = 85
+```
+
+---
+
+# Speech Profile Update
+
+Speech Profile สามารถเปลี่ยนตาม Timeline
+
+ตัวอย่าง
+
+```text
+State 0
+
+Pronoun Preference:
+ผม
+
+Ending:
+ครับ
+
+↓
+
+State 3
+
+Pronoun Preference:
+ข้า
+
+Ending:
+...
+
+↓
+
+State 5
+
+Pronoun Preference:
+กู
+
+Ending:
+เว้ย
+```
+
+---
+
+# Timeline Resolution Rule
+
+ก่อนวิเคราะห์ Dialogue ทุกครั้ง
+
+ระบบต้อง Resolve Character State ก่อน
+
+```text
+Character
+
+↓
+
+Resolve Timeline
+
+↓
+
+Effective Character State
+
+↓
+
+Dialogue Analysis
+
+↓
+
+Translation Guidance
+```
+
+---
+
+# Scope Impact
+
+การเปลี่ยนแปลงนี้มีผลกับ
+
+* ✅ Character Knowledge Specification
+* ✅ Dialogue Metadata Specification
+* ✅ Mapping & Decision Specification
+* ✅ JSON Schema
+
+ไม่มีผลกับ
+
+* Taxonomy IDs
+* Annotation Rules
+* Prompt Structure
+* Agent Workflow
+
+---
+
+# TLAS v1 Architecture (Updated)
+
+```text
+Original Script
+        │
+        ▼
+Dialogue Analysis Agent
+        │
+        ├── วิเคราะห์ Character
+        ├── วิเคราะห์ Dialogue
+        ├── Resolve Timeline State
+        │
+        ▼
+Character Knowledge
+(Time-aware + Base/Delta)
+        │
+        ▼
+Dialogue Metadata
+        │
+        ▼
+Mapping / Decision Engine
+        │
+        ▼
+Translation Guidance
+        │
+        ▼
+Translation Agent
+```
+
+---

@@ -1,0 +1,6 @@
+Original,Initial,Filename,Row,Note,Role,Speaker,Displayable
+Fullscreen,เต็มหน้าจอ,plugins.js,1,SRD_FullscreenToggleOption.parameters['Option Name'],UI/Plugin,SRD_FullscreenToggleOption,Yes
+New Game,เริ่มเกมใหม่,plugins.js,2,CoreEngine.parameters['New Game Text'],UI/Plugin,CoreEngine,Yes
+Continue,เล่นต่อ,plugins.js,3,CoreEngine.parameters['Continue Text'],UI/Plugin,CoreEngine,Yes
+Options,ตั้งค่า,plugins.js,4,CoreEngine.parameters['Options Text'],UI/Plugin,CoreEngine,Yes
+Volume,ระดับเสียง,plugins.js,5,AudioEngine.parameters['Volume Text'],UI/Plugin,AudioEngine,Yes

@@ -1,0 +1,84 @@
+{
+  "character_id": "CHAR_NAME_HERE",
+  "name": "Character Name",
+  "identity": {
+    "gender": "MALE/FEMALE/UNKNOWN",
+    "age": "CHILD/TEEN/ADULT/ELDER/UNKNOWN",
+    "species": "HUMAN/ELF/BEAST/etc"
+  },
+  "base_speech_style": {
+    "self_pronoun": "ฉัน/ผม/หนู/etc",
+    "target_pronoun": "นาย/คุณ/เธอ/etc",
+    "ending_particle": "คะ/ค่ะ/ครับ/จ้ะ/etc",
+    "formality_level": 5
+  },
+  "base_state": {
+    "personality": [
+      {
+        "tag": "PER_SOC_POLITE",
+        "weight": 80
+      },
+      {
+        "tag": "PER_VIBE_SERIOUS",
+        "weight": 20
+      }
+    ],
+    "speech_habit": [
+      {
+        "tag": "SPR_HESITANT",
+        "weight": 60
+      }
+    ],
+    "values": [
+      {
+        "tag": "VAL_DUTY",
+        "weight": 100
+      }
+    ],
+    "relationships": [
+      {
+        "target_character_id": "CHAR_OTHER",
+        "target_name": "Other Name",
+        "roles": [
+          "ROLE_AUTH_MASTER"
+        ],
+        "affinity": "AFF_HOSTILE",
+        "intimacy": "INT_DISTANT",
+        "power_dynamic": "DYN_SUBMISSIVE",
+        "specific_speech": {
+          "self_pronoun": "กระผม",
+          "target_pronoun": "ท่าน",
+          "ending_particle": "ครับ"
+        }
+      }
+    ]
+  },
+  "timeline_states": [
+    {
+      "state_id": "STATE_PHASE2_CHUNK001_SUB0",
+      "trigger_event_id": "chunk_p2_0001",
+      "timeline_phase": 2,
+      "description": "คำบรรยายการเปลี่ยนแปลงเชิงจิตวิทยาหรือเหตุการณ์สำคัญ",
+      "delta": {
+        "personality": [
+          {
+            "tag": "PER_SOC_RUDE",
+            "weight": 90
+          }
+        ],
+        "relationships": [
+          {
+            "target_character_id": "CHAR_OTHER",
+            "target_name": "Other Name",
+            "roles": [
+              "ROLE_CON_ENEMY"
+            ],
+            "affinity": "AFF_HOSTILE",
+            "intimacy": "INT_ESTRANGED",
+            "power_dynamic": "DYN_EQUAL"
+          }
+        ]
+      }
+    }
+  ]
+}

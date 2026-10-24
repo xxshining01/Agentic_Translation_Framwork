@@ -1,0 +1,190 @@
+# Software Architecture Document (SAD)
+
+**หมายเลขเอกสาร:** SAD-002 (Consolidated)
+
+**ชื่อระบบ:** Rule-Based Dialogue Localization Processing Pipeline (TLAS Localization Engine)
+
+**เวอร์ชันระบบ:** 2.0
+
+**สถานะ:** อนุมัติ (Accepted) / ปรับปรุงฉบับสมบูรณ์
+
+---
+
+## 1. ภาพรวมสถาปัตยกรรมระบบ (System Overview & Architectural Vision)
+
+ระบบ **TLAS Localization Engine** ถูกออกแบบขึ้นเพื่อเป็นโครงสร้างพื้นฐานในการประมวลผล บริหารจัดการ และสกัดบริบทสไตล์ภาษาไทยสำหรับการแปลสคริปต์บทสนทนาในเกม RPGM และ Ren'Py ที่มีความซับซ้อนและขนาดใหญ่
+
+แนวคิดหลักของสถาปัตยกรรมนี้คือ **Data-Driven Processing Pipeline** ที่แยกข้อมูลและตรรกะออกเป็น 3 ชั้นหลัก (3-Tier Decoupled Layer):
+
+1. **Raw Game Data Layer (Input Layer):** สคริปต์ดิบจากเอนจิ้นเกม (เช่น `chunk_px_xxxx.json`) บรรจุข้อมูล Map, Event Conditions, Timeline Phase, Control Codes และก้อนบทสนทนาภาษาอังกฤษ
+2. **Context & Business Logic Layer (Processing Engine):** ประมวลผลผ่านฐานข้อมูลตัวละคร (`character_profile.json`) และฐานข้อมูลกฎภาษา (`taxonomy.json`) โดยใช้ตรรกะ **4D Relationship Matrix** และ **Tier 0-3 Priority Resolution**
+3. **Localization Guideline Output Layer (Output Interface):** ผลลัพธ์ข้อมูลบทสนทนาที่ทำความสะอาดแล้ว แยกผู้พูด-ผู้ฟัง พร้อมแนบไกด์ไลน์สรรพนาม หางเสียง โทนภาษา และแท็กแจ้งเตือนการ Override ทางอารมณ์ เพื่อส่งต่อให้นักแปล
+
+```
+[Raw Chunk JSON] 
+       │
+       ▼
+[1. Data Parser & Cleaner] ──(Regex Splitting / Control Code Masking)
+       │
+       ▼
+[2. Character State Evaluator] ──(Evaluate Timeline Phase -> Load Base / Delta Profile)
+       │
+       ▼
+[3. Priority Resolution Engine] ──(Evaluate Tier 0 [Dynamic] -> Tier 1 [4D Matrix] -> Tier 2 -> Tier 3)
+       │
+       ▼
+[4. Grammar & Extension Processor] ──(Thai Particles: คะ/ค่ะ/ครับ & Vocal Extensions)
+       │
+       ▼
+[5. Output Formatter] ──(Generate Structured Translation Grid & Guidelines)
+
+```
+
+---
+
+## 2. เป้าหมายและข้อจำกัดทางสถาปัตยกรรม (Architectural Goals & Constraints)
+
+### 2.1 เป้าหมายหลัก (Core Goals)
+
+* **High Flexibility & Universal Scope:** รองรับบริบทความสัมพันธ์ที่ซับซ้อนในทุกแนวเกม (ดราม่า, มาเฟีย, ยุคกลาง, ไอดอล) ผ่านการรวมโครงสร้างบทบาทแบบนามธรรม (`Structural Role Abstraction`)
+* **Emotion & Context Reactivity:** รองรับสภาวะอารมณ์สุดโต่งชั่วคราว (เช่น ตัวละครสุภาพหลุดสบถเมื่อโกรธจัด) ผ่านระบบ **Tier 0 Dynamic Override** โดยไม่ทำให้บุคลิกตั้งต้น (Base Profile) ผิดเพี้ยน
+* **Token & Data Optimization:** บีบอัด Taxonomy ให้กระชับเพื่อลดขนาด Token เมื่อประมวลผลร่วมกับ AI และช่วยให้เขียนสคริปต์สกัดข้อมูล (Data Extraction) ได้รวดเร็ว
+* **Preservation of Game Syntax:** รักษารหัสควบคุม (Control Codes) ของเอนจิ้นเกม (เช่น `\|`, `\fb`, `\C[0]`) ไม่ให้เสียหายระหว่างกระบวนการแปล
+
+### 2.2 ข้อจำกัด (Constraints)
+
+* **Raw Text Bundling:** สคริปต์ดิบรวมบทสนทนาหลายบรรทัดไว้ในก้อน `text` เดียวกัน จึงต้องมีกระบวนการ Line-by-Line Parsing และแยก `Speaker_ID` ออกก่อนประมวลผล
+* **Human-in-the-Loop Execution:** ระบบทำหน้าที่สร้าง "ไกด์ไลน์" เพื่อควบคุมกรอบความถูกต้อง แต่การเลือกใช้รูปประโยคภาษาไทยให้สละสลวยตรงกับรูปปากในเกม ยังต้องใช้วิจารณญาณของนักแปลเป็นผู้ปรับแต่งขั้นสุดท้าย
+
+---
+
+## 3. ส่วนประกอบหลักของระบบ (System Component Architecture)
+
+ระบบประกอบด้วย 5 มอดูลหลักที่ทำงานร่วมกันแบบ Sequential Pipeline:
+
+```
++-----------------------------------------------------------------------+
+|                       TLAS LOCALIZATION ENGINE                        |
++-----------------------------------------------------------------------+
+|                                                                       |
+|  +------------------------+        +-------------------------------+  |
+|  |  1. Data Parser &      | -----> |  2. Character Profile & State |  |
+|  |     Cleaner            |        |     Manager                   |  |
+|  +------------------------+        +-------------------------------+  |
+|               │                                    │                  |
+|               ▼                                    ▼                  |
+|  +-----------------------------------------------------------------+  |
+|  |  3. Context Resolution & Priority Engine                        |  |
+|  |     - Tier 0: Dynamic Context Override (EMO / TON / SIT)        |  |
+|  |     - Tier 1: Exact Match via 4D Relationship Matrix            |  |
+|  |     - Tier 2: Target Condition & Social Taxonomy Match          |  |
+|  |     - Tier 3: Base Profile Fallback                             |  |
+|  +-----------------------------------------------------------------+  |
+|                               │                                       |
+|                               ▼                                       |
+|  +-----------------------------------------------------------------+  |
+|  |  4. Grammar & Extension Post-Processor                          |  |
+|  |     - Thai Particle Resolution (คะ/ค่ะ/ครับ/จ้ะ/จ๊ะ)              |  |
+|  |     - Vocal Extension & Tone Guidelines (คร้าบ/ค่าา/โว้ย)        |  |
+|  +-----------------------------------------------------------------+  |
+|                               │                                       |
+|                               ▼                                       |
+|  +-----------------------------------------------------------------+  |
+|  |  5. Translation Output Formatter (Grid / Spreadsheet Output)     |  |
+|  +-----------------------------------------------------------------+  |
+|                                                                       |
++-----------------------------------------------------------------------+
+
+```
+
+### 3.1 Data Parser & Cleaner Module (`RawChunkParser`)
+
+* **หน้าที่:** สกัดข้อมูลในอาร์เรย์ `raw_dialogues` จากไฟล์ Chunk
+* **การทำงาน:**
+1. สกัดข้อมูล `timeline_phase`, `source`, `conditions` และ `faces_used`
+2. ใช้ Regular Expression สกัดชื่อผู้พูดจากโครงสร้าง `[Speaker:] Text`
+3. หั่นก้อนข้อความ (`text`) ออกเป็นบรรทัดย่อย (Line-by-Line Dialogues)
+4. ทำ Masking ซ่อน Control Codes (`\|`, `\fb`, `\C[x]`, `\n`) โดยบันทึกตำแหน่งออฟเซตไว้ในอาร์เรย์สำรอง
+
+
+
+### 3.2 Character Profile & State Manager (`CharacterStateManager`)
+
+* **หน้าที่:** จัดการประเมินสภาวะของตัวละครตามลำดับเหตุการณ์
+* **การทำงาน:**
+1. ดึงข้อมูล Base Identity (`gender`, `age`, `species`) และ `base_speech_style`
+2. อ่านค่า `timeline_phase` จากบรรทัดสคริปต์ หากพบว่าตรงกับเงื่อนไขใน `timeline_states` ระบบจะทำการซ้อนทับข้อมูล (Apply Delta Overrides) เช่น อัปเดตโครงสร้าง 4D Relationship จาก `REL_FRIEND` เป็น `REL_ENEMY` ในกรณีถูกทรยศ
+
+
+
+### 3.3 Context Resolution & Priority Engine (`PriorityRuleEngine`)
+
+* **หน้าที่:** คำนวณหาชุดสรรพนามและหางเสียงด้วยระบบลำดับความสำคัญ Tier 0 - Tier 3
+* **การทำงาน:**
+* **Tier 0 (Dynamic Override):** ตรวจสอบแท็กอารมณ์/สถานการณ์รุนแรงในประโยคนั้น (เช่น `EMO_ANGER`, `TON_AGGRESSIVE`) หากพบ ให้บังคับใช้กฎแทรกแซงพิเศษทันที ( Override สรรพนามเบสเป็นคำหยาบ/ตัดหางเสียงสุภาพทิ้ง)
+* **Tier 1 (Exact Match via 4D Matrix):** ตรวจสอบ `listener_id` ใน `relationships` ของโปรไฟล์ผู้พูด หากพบ ให้ประเมินค่าความสัมพันธ์ทั้ง 4 แกน (`roles`, `affinity`, `intimacy`, `power_dynamic`) เพื่อดึงชุดคำใน `specific_speech`
+* **Tier 2 (Target Condition Match):** หากเป็น NPC หรือคนแปลกหน้า ให้ดึงคุณลักษณะของผู้ฟังไปเทียบกับ `target_conditions` ใน `taxonomy.json` เพื่อหากฎทางสังคมที่เหมาะสม
+* **Tier 3 (Base Fallback):** หากไม่เข้าเงื่อนไขใด ให้ดึงค่าจาก `base_speech_style` ของผู้พูดมาใช้เป็นค่าตั้งต้น
+
+
+
+### 3.4 Grammar & Extension Post-Processor (`ThaiGrammarProcessor`)
+
+* **หน้าที่:** ปรับแต่งรูปแบบคำลงท้ายให้ถูกต้องตามไวยากรณ์ไทยและสภาวะอารมณ์
+* **การทำงาน:**
+1. จำแนกประเภทประโยค (ประโยคบอกเล่า/ตอบรับ vs ประโยคคำถาม/เรียกขาน) เพื่อแปลง Root Particle เช่น เลือกใช้ "ค่ะ" หรือ "คะ", "จ้ะ" หรือ "จ๊ะ"
+2. ตรวจสอบแท็กแสดงอารมณ์เพื่อสร้างคำแนะนำการลากเสียง (Vocal Extensions) เช่น เปลี่ยน "ครับ" เป็น "คร้าบ" เมื่อมีแท็ก `TON_PLAYFUL`
+
+
+
+### 3.5 Translation Output Formatter (`OutputFormatter`)
+
+* **หน้าที่:** รวมข้อมูลบรรทัดบทสนทนาที่ผ่านการทำความสะอาดแล้ว จัดเรียงใส่ตารางงาน (Translation Grid) โดยแสดงประโยคภาษาอังกฤษ, รหัสควบคุมที่ถูกซ่อนไว้, ไกด์ไลน์สรรพนาม/หางเสียงที่ระบบแนะนำ และช่องสำหรับให้นักแปลใส่คำแปลภาษาไทย
+
+---
+
+## 4. แผนผังการไหลของข้อมูล (Data Flow Architecture)
+
+```
+[Input: Raw Chunk Entry @ Phase 2149]
+  │
+  ├─> Parse Raw Line: "[Alice:] I will never forgive you for what you've done to my family!!"
+  │     ├─> Speaker_ID: "CHAR_ALICE_001" (Base Profile: สุภาพ / ผม-คุณ-ครับ/ค่ะ)
+  │     ├─> Listener_ID: "CHAR_BOB_002"
+  │     └─> Detected Dynamic Tags: { emotion: "EMO_ANGER", tone: "TON_AGGRESSIVE" }
+  │
+  ├─> Evaluate Character State (Phase 2149)
+  │     └─> Load Alice Profile -> Applied Delta: STATE_CH2_AFTER_BETRAYAL
+  │
+  ├─> Process Priority Engine
+  │     ├─> Check Tier 0 (Dynamic Context):
+  │     │     └─> Found EMO_ANGER + TON_AGGRESSIVE -> Trigger Dynamic Override Rule!
+  │     ├─> Evaluate Emotion Snap Logic vs Character Quirk:
+  │     │     ├─> Self Pronoun Override: "ฉัน"
+  │     │     ├─> Target Pronoun Override: "แก"
+  │     │     └─> Particle Override: REMOVE_SUFIX (ตัด "ค่ะ" ทิ้งเพื่อแสดงความแข็งกร้าว)
+  │     └─> Resolution Output: { Self: "ฉัน", Target: "แก", Ending: "" [Override Active] }
+  │
+  └─> Render Translation Grid Row:
+        ┌─────────────┬───────────┬────────────────┬────────────────────────┬─────────────────────────┐
+        │ Speaker     │ Listener  │ Dynamic State  │ Guideline (Tier 0)     │ Target Translation Text │
+        ├─────────────┼───────────┼────────────────┼────────────────────────┼─────────────────────────┤
+        │ Alice       │ Bob       │ Anger / Aggro  │ ฉัน - แก (ตัด ค่ะ ทิ้ง) │ [รอการแปลจากนักแปล]    │
+        └─────────────┴───────────┴────────────────┴────────────────────────┴─────────────────────────┘
+
+```
+
+---
+
+## 5. การจัดการกรณีขอบเขตและความผิดพลาด (Edge Cases & Exception Handling)
+
+1. **กรณีโกรธจัดแบบผู้ดี/เย็นชา (Cold Anger vs Aggressive Snap):**
+* *การจัดการ:* ตัวละครบางตัวเมื่อโกรธจัดจะไม่หลุดพูดคำหยาบ (ไม่ใช้ กู-มึง) ระบบจะประเมินฟิลด์ `speech_overrides` ใน Profile ของตัวละครนั้น หากระบุสไตล์เป็น Cold Anger ระบบ Tier 0 จะคงสรรพนามสุภาพ ("ฉัน/ผม") ไว้ แต่สั่งบังคับตัดคำลงท้าย ("ครับ/ค่ะ") ทิ้งทั้งหมดทันที
+
+
+2. **ไม่พบ Listener ID หรือพูดกับตัวเอง (Monologue / System Text):**
+* *การจัดการ:* ระบบตั้งค่า `listener_id = null` ข้ามกระบวนการ Tier 1 แล้วเข้าสู่ Tier 2/3 หรือใช้ภาษากลางสำหรับการบรรยายอัตโนมัติ
+
+
+3. **การสูญหายของ Control Codes ระหว่างแปล (Code Corruption):**
+* *การจัดการ:* ก่อนนำไฟล์ประกอบกลับเข้าเกม ระบบ Re-assembly จะเปรียบเทียบ `retained_control_codes` ต้นฉบับ หากพบว่าแท็กสั่งการของเอนจิ้นหายไป ระบบจะพ่น Warning พร้อมระบุตำแหน่งบรรทัดให้นักแปลแก้ไขทันที

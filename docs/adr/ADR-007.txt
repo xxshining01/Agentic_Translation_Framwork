@@ -1,0 +1,63 @@
+# ADR-007: Dynamic Prompt Assembly Engine
+
+**Status:** Proposed
+**Date:** 2026-07-09
+**Decision Maker:** Product Owner + AI Solution Architect
+
+---
+
+## 1. Context and Problem Statement
+
+จากแนวคิดใน ADR-000 เราปฏิเสธการใช้ "Static Master Prompt" (Prompt แบบตายตัวที่เขียนยาวๆ ไว้ล่วงหน้า) เพราะในโปรเจกต์ขนาดใหญ่ การส่งข้อมูลตัวละครทั้งหมด 50 ตัว หรือคำศัพท์เฉพาะ 500 คำ ไปให้ AI อ่านทุกครั้งที่แปลประโยคสั้นๆ เป็นเรื่องที่:
+
+1. **สิ้นเปลือง Token มหาศาล** (ต้นทุน API พุ่งสูง)
+2. **AI เกิดความสับสน (Cognitive Overload)** และอาจหยิบข้อมูลผิดตัวละครมาใช้
+3. **ชนขีดจำกัด Context Window** ของโมเดลภาษา
+
+เราจำเป็นต้องมีระบบที่สามารถ "เลือกหยิบ" ข้อมูลเฉพาะที่เกี่ยวข้องกับประโยคปัจจุบัน มาประกอบร่างเป็น Prompt ชั่วคราว (Ephemeral Prompt) ก่อนส่งให้ AI
+
+## 2. Decision
+
+เราตัดสินใจสร้าง **Dynamic Prompt Assembly Engine** (เครื่องจักรประกอบ Prompt) ในฝั่ง Python ทำหน้าที่เป็น Template Engine (คล้าย Jinja2) เพื่อประกอบ Prompt แบบ Just-in-Time (JIT)
+
+โครงสร้าง Prompt ที่จะถูกส่งให้ AI จะถูกแบ่งออกเป็น 3 ส่วนหลัก (Layers) เสมอ:
+
+1. **System Layer (Static):**
+* คำสั่งหลักของ Agent นั้นๆ (เช่น "คุณคือ Editor หน้าที่ของคุณคือ...")
+* กฎเหล็ก (Constraints) ของโปรเจกต์
+
+
+2. **Context Layer (Dynamic):**
+* *ส่วนนี้ Python จะดึงมาประกอบให้ใหม่ทุก Batch*
+* **Glossary Match:** คำศัพท์เฉพาะที่เจอในประโยคนี้เท่านั้น
+* **Character Profile:** ข้อมูลนิสัยของตัวละครที่กำลังพูดอยู่เท่านั้น
+* **Translation Memory (TM):** ประโยคอ้างอิงที่เคยแปลและบริบทใกล้เคียง
+* **Story Summary:** สรุปเนื้อเรื่องของบทปัจจุบัน
+
+
+3. **Task Layer (Dynamic):**
+* ประโยคต้นฉบับที่ต้องการให้แปล หรือข้อความที่ต้องการให้ตรวจสอบ (Payload จาก ADR-005)
+
+
+
+## 3. Rationale
+
+การประกอบ Prompt แบบ Dynamic ช่วยแก้ปัญหาความสับสนของ AI ได้อย่างเด็ดขาด (Context Isolation) เมื่อโมเดลเห็นข้อมูลเฉพาะสิ่งที่มันต้องใช้ ณ วินาทีนั้น ความแม่นยำในการรักษาคาร์แรคเตอร์และปฏิบัติตาม Glossary จะพุ่งสูงขึ้นเข้าใกล้ขีดสุด นอกจากนี้ การแยก System Layer ออกจาก Context Layer ทำให้เราสามารถปรับจูน (Prompt Engineering) กฎหลักของ Agent ได้จากจุดเดียว โดยไม่ต้องไปแก้โค้ดฝั่งสืบค้นข้อมูล
+
+## 4. Consequences
+
+**Pros (ข้อดี):**
+
+* **Token Efficiency:** ประหยัด Token อย่างมหาศาล เพราะส่งไปเฉพาะข้อมูลที่จำเป็น
+* **Laser-Focused Accuracy:** AI ทำงานแม่นยำขึ้น ลดอาการ Hallucination
+* **Modularity:** ง่ายต่อการทำ A/B Testing โมเดล AI หลายค่าย (ปรับ Template เล็กน้อยให้เข้ากับข้อจำกัดของ GPT, Claude หรือ Gemini ได้ง่าย)
+
+**Cons (ข้อเสีย):**
+
+* **Retrieval Complexity:** ฝั่ง Python ต้องมีระบบค้นหาที่เร็วและแม่นยำมาก (เช่น Exact Regex Match สำหรับ Glossary หรือ Vector Search สำหรับ Story Memory) ก่อนที่จะนำมาประกอบ Prompt ได้
+* **Debugging Difficulty:** เมื่อเกิดข้อผิดพลาดในการแปล การหาว่า AI พลาดเพราะอะไรจะทำได้ยากขึ้น หากเราไม่ทำการ Log "Prompt ฉบับสมบูรณ์" (Assembled Prompt) ที่ถูกส่งไปในวินาทีนั้นเก็บไว้ด้วย
+
+---
+## [UPDATE: 2026-07-18] Explicit Role and Speaker Injection
+**Rationale for Update:**
+ระบบ Context Engine ได้ถูกอัปเดตให้รองรับการดึงข้อมูล `Role` และ `Speaker` จาก CSV (รูปแบบ 8 คอลัมน์) โดยตรง แทนที่จะพึ่งพา Regex เพียงอย่างเดียว ข้อมูลเหล่านี้จะถูกแนบไปใน Task Layer (เช่น `ID: ... | Role: Dialogue | Speaker: Aila`) ซึ่งช่วยลดภาระในการอนุมานของ AI และเพิ่มความแม่นยำในการเลือกคำสรรพนามและน้ำเสียงให้ตรงกับตัวละครมากยิ่งขึ้น

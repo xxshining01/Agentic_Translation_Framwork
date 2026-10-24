@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TLAS_LLM_Extraction_Template_v4",
+  "description": "Lean Chunk Extraction Payload Template for LLM Analyzer (Only Parameters, Zero Thai Pronouns)",
+  "type": "object",
+  "properties": {
+    "chunk_id": {
+      "type": "string",
+      "example": "chunk_0042"
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "character_name": {
+            "type": "string",
+            "example": "Dan"
+          },
+          "delta": {
+            "type": "object",
+            "properties": {
+              "personality": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "tag": { "type": "string", "example": "PER_SOC_POLITE" },
+                    "weight": { "type": "integer", "minimum": 1, "maximum": 100, "example": 80 }
+                  },
+                  "required": ["tag", "weight"]
+                }
+              },
+              "speech_habit": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "tag": { "type": "string", "example": "SPR_DIRECT" },
+                    "weight": { "type": "integer", "minimum": 1, "maximum": 100, "example": 60 }
+                  },
+                  "required": ["tag", "weight"]
+                }
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "tag": { "type": "string", "example": "VAL_DUTY" },
+                    "weight": { "type": "integer", "minimum": 1, "maximum": 100, "example": 85 }
+                  },
+                  "required": ["tag", "weight"]
+                }
+              },
+              "relationships": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "target_character_id": { "type": "string", "example": "CHAR_LILY" },
+                    "target_name": { "type": "string", "example": "Lily" },
+                    "roles": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "example": ["ROLE_FAM_SIBLING_YOUNGER"]
+                    },
+                    "affinity": { "type": "string", "example": "AFF_DEVOTED" },
+                    "intimacy": { "type": "string", "example": "INT_CONFIDANT" },
+                    "power_dynamic": { "type": "string", "example": "DYN_DOMINANT" },
+                    "speech_style": {
+                      "type": "object",
+                      "properties": {
+                        "derivation_rule": { "type": "string", "example": "RULE_OLDER_BROTHER_TO_YOUNGER_SISTER" }
+                      },
+                      "required": ["derivation_rule"]
+                    }
+                  },
+                  "required": ["target_character_id", "target_name", "roles", "affinity", "intimacy", "power_dynamic", "speech_style"]
+                }
+              }
+            },
+            "required": ["personality", "speech_habit", "values", "relationships"]
+          }
+        },
+        "required": ["character_name", "delta"]
+      }
+    },
+    "scene_context": {
+      "type": "string",
+      "example": "Dan กำลังพูดคุยปลอบโยน Lily ในห้องนั่งเล่น"
+    },
+    "dialogue_metadata": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dialogue_index": { "type": "integer", "example": 0 },
+          "speaker": { "type": "string", "example": "Dan" },
+          "listener": { "type": "string", "example": "Lily" },
+          "emotion": { "type": "string", "example": "EMO_JOY" },
+          "tone": { "type": "string", "example": "TON_GENTLE" }
+        },
+        "required": ["dialogue_index", "speaker", "listener", "emotion", "tone"]
+      }
+    }
+  },
+  "required": ["chunk_id", "characters", "scene_context", "dialogue_metadata"]
+}

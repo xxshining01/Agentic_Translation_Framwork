@@ -1,0 +1,32 @@
+# ADR-011 Auto Translation Memory and Glossary
+
+Status: Accepted
+Date: 2026-07-12
+Decision Maker: Product Owner + AI Solution Architect
+
+---
+
+## 1. Context and Problem Statement
+
+ในการแปลเกมหรือซอฟต์แวร์ มักจะมีคำศัพท์เฉพาะ ชื่อตัวละคร ชื่อสกิล หรือประโยคเดิมๆ ซ้ำไปซ้ำมา (เช่น "Potion", "Attack", "Are you sure?") หาก AI แต่ละตัวไม่ได้รับรู้คำแปลในอดีต (Past Translations) ก็จะแปลคำเหล่านี้แตกต่างกันออกไปในแต่ละ Batch ทำให้ขาดความสม่ำเสมอ (Inconsistency)
+
+แม้ว่าระบบจะมี Glossary ที่ผู้ใช้ตั้งค่าไว้ใน Master Prompt (ADR-004) แต่การเพิ่มคำศัพท์ทุกคำเข้าไปแบบ Manual เป็นงานที่หนักหน่วง นอกจากนี้ บริบทการใช้ประโยคซ้ำในบางครั้งอาจแตกต่างกัน ทำให้ไม่สามารถใช้การแทนที่แบบ String Replace 100% ได้ตลอดเวลา
+
+## 2. Decision
+
+เราพัฒนาระบบ **Smart Translation Memory (TM) & Auto-Glossary** เข้าสู่ `ContextEngine`:
+
+1. **Full TM Pre-scan:** ก่อนเริ่มกระบวนการแปล ระบบ Python จะสแกนแถวที่ถูกแปลไปแล้วทั้งหมด (ALREADY_TRANSLATED) ในไฟล์ Input CSV เพื่อใช้เป็นคลังข้อมูลตั้งต้น
+2. **Exact Sentence Match:** เก็บประโยคฉบับเต็มไว้ใน Dictionary หากในอนาคตพบประโยคภาษาอังกฤษที่ตรงกัน 100% ระบบจะแนบคำแนะนำเข้าสู่ Prompt ของ AI ว่า *"EXACT PAST TRANSLATION. Use as reference but adapt to current context if needed: [คำแปล]"* เพื่อให้ AI ใช้อ้างอิงเป็นหลัก แต่ยังเปิดโอกาสให้ปรับเปลี่ยนตามบริบทได้
+3. **Auto-Glossary Extraction:** หากพบข้อความสั้นๆ (ความยาว < 25 ตัวอักษร, ไม่เกิน 3 คำ, ไม่มีอักขระพิเศษ) ระบบจะอนุมานว่าเป็นชื่อเฉพาะ, ไอเทม หรือคำสั่ง UI จากนั้นจะยัดใส่ `Aho-Corasick Automaton` ทันที ทำให้ประโยคยาวๆ ในอนาคตที่มีคำสั้นๆ เหล่านี้แทรกอยู่ จะถูกตรวจจับและส่ง Glossary Guideline ให้ AI อัตโนมัติ โดยที่ผู้ใช้ไม่ต้องคีย์ข้อมูลเอง
+
+## 3. Consequences
+
+### Positive (ผลดี):
+- ความสม่ำเสมอ (Consistency) ของงานแปลเพิ่มขึ้นมหาศาล โดยเฉพาะชื่อไอเทมและสกิล
+- ลดภาระการสร้าง Glossary แบบ Manual ให้กับผู้ใช้งาน
+- AI ยังคงรักษาความยืดหยุ่นทางบริบทไว้ได้ ไม่ตายตัวเหมือน Hard-coded String Replace
+
+### Negative (ผลเสีย/สิ่งที่ต้องระวัง):
+- หากคำแปลเก่าในไฟล์ CSV แปลมาผิด ระบบจะจำค่าที่ผิดไปใช้อ้างอิงต่อ (Garbage in, Garbage out)
+- ประสิทธิภาพและหน่วยความจำ (RAM) จะถูกใช้งานเพิ่มขึ้นเล็กน้อยในช่วง Pre-scan หากไฟล์ CSV มีขนาดใหญ่มาก (ระดับแสนบรรทัด) แต่ยังอยู่ในเกณฑ์ที่รับได้สำหรับ 32GB RAM

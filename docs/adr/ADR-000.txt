@@ -1,0 +1,394 @@
+# ADR-000 : Project Vision and Core Architecture
+
+**Status:** Accepted
+
+**Date:** 2026-07-09
+
+**Decision Maker:** Product Owner + AI Solution Architect
+
+---
+
+# 1. Project Name
+
+**Agentic Translation Framework (ATF)**
+
+---
+
+# 2. Vision
+
+ATF is an AI-native translation framework designed to produce professional-quality game, novel, manga, and visual novel translations using multiple specialized AI Agents instead of a single monolithic Large Language Model.
+
+The framework is intended to become a reusable translation platform rather than a translator for a single game engine.
+
+---
+
+# 3. Primary Goal
+
+Produce translations that are as close as possible to professional human translators while maintaining:
+
+* Character consistency
+* Story consistency
+* Emotional expression
+* Natural Thai language
+* Game code integrity
+* Formatting integrity
+
+Target quality:
+
+> 90%+ of professional human translation quality.
+
+---
+
+# 4. Scope
+
+Supported input formats are designed to be engine-independent.
+
+Examples include:
+
+* RPG Maker
+* Ren'Py
+* Unity Dialogue
+* JSON
+* CSV
+* XML
+* TXT
+* Visual Novel Script
+
+Game engine specific parsing must exist only inside Parser modules.
+
+The Translation Framework itself must never depend on a specific engine.
+
+---
+
+# 5. Design Philosophy
+
+The project intentionally rejects the traditional approach of using one extremely long Master Prompt.
+
+Instead, the system adopts:
+
+* Multi-Agent Architecture
+* Dynamic Prompt Assembly
+* Structured Memory
+* Verification Loops
+* KPI-driven Quality Control
+
+---
+
+# 6. Core Principle
+
+No single AI model is expected to perform every task.
+
+Each Agent must have one clearly defined responsibility.
+
+This follows the Single Responsibility Principle.
+
+---
+
+# 7. Project Roles
+
+Product Owner
+
+Responsible for:
+
+* Product vision
+* Translation quality expectation
+* Business decisions
+* Final acceptance
+
+AI Solution Architect
+
+Responsible for:
+
+* System architecture
+* Agent design
+* Prompt architecture
+* Development roadmap
+* Technical decisions
+
+---
+
+# 8. AI Limitation Acknowledgement
+
+The project explicitly acknowledges that LLMs:
+
+* are probabilistic
+* are not deterministic
+* cannot guarantee 100% instruction following
+* may forget instructions
+* may hallucinate
+* may fail self-validation
+
+Therefore,
+
+Critical validation must never rely solely on AI.
+
+---
+
+# 9. AI Responsibilities
+
+AI should perform tasks requiring semantic understanding.
+
+Examples:
+
+* Translation
+* Editing
+* Context understanding
+* Emotion
+* Character personality
+* Tone
+* Story summarization
+* Dialogue timing
+
+---
+
+# 10. Python Responsibilities
+
+Python should perform deterministic tasks.
+
+Examples:
+
+* Symbol counting
+* Placeholder validation
+* Regex validation
+* Game code validation
+* Line counting
+* Formatting validation
+* Translation Memory lookup
+* Glossary lookup
+* Character lookup
+
+Python must never decide translation quality.
+
+---
+
+# 11. Dynamic Prompt System
+
+The project rejects static Master Prompts.
+
+Instead,
+
+Executive Agent must dynamically assemble prompts from:
+
+* Character Database
+* Story Summary
+* Translation Memory
+* Glossary
+* Dialogue Batch
+* Translation Rules
+
+Only information relevant to the current batch may be included.
+
+---
+
+# 12. Memory Architecture
+
+The project separates memory into independent layers.
+
+Character Memory
+
+Story Memory
+
+Glossary Memory
+
+Translation Memory
+
+Project Memory
+
+Agents should only access memory required for their responsibility.
+
+---
+
+# 13. Agent Communication
+
+Agents must never directly depend on each other.
+
+Agents communicate only through standardized contracts.
+
+Each Agent receives:
+
+Input
+
+↓
+
+Processing
+
+↓
+
+Output
+
+No Agent should know who consumes its output.
+
+---
+
+# 14. Event Driven Architecture
+
+The workflow must be event-driven.
+
+Example:
+
+TranslationCompleted
+
+↓
+
+EditorStarted
+
+↓
+
+QACompleted
+
+↓
+
+TimingStarted
+
+↓
+
+ValidationCompleted
+
+This allows future parallel execution.
+
+---
+
+# 15. Workflow Philosophy
+
+Translation is not a single step.
+
+It is a production pipeline.
+
+Translation
+
+↓
+
+Editing
+
+↓
+
+Consistency
+
+↓
+
+Quality Assurance
+
+↓
+
+Timing
+
+↓
+
+Validation
+
+↓
+
+Output
+
+---
+
+# 16. Quality Assurance
+
+Translation quality must be measured using KPIs instead of subjective judgement.
+
+Examples:
+
+Naturalness
+
+Meaning Preservation
+
+Context Accuracy
+
+Character Consistency
+
+Pronoun Accuracy
+
+Emotion
+
+Tone
+
+Formatting
+
+---
+
+# 17. Retry Policy
+
+Failed outputs should never restart the entire pipeline.
+
+Only the failed stage should be repeated.
+
+Repair loops should operate at sentence level whenever possible.
+
+---
+
+# 18. Symbol Philosophy
+
+Dialogue timing symbols such as:
+
+✎
+
+|
+
+.
+
+are considered narrative timing instructions.
+
+AI is responsible for determining appropriate placement.
+
+Python is responsible for verifying correctness.
+
+---
+
+# 19. Translation Consistency
+
+The project prioritizes consistency over creativity.
+
+Examples include:
+
+Character names
+
+Locations
+
+Items
+
+Skills
+
+Pronouns
+
+Honorifics
+
+Repeated dialogue
+
+Translation Memory must always be consulted before generating new translations.
+
+---
+
+# 20. Repository Truth
+
+The repository is the single source of truth.
+
+ChatGPT memory must never be treated as project memory.
+
+Every important architectural decision must be documented as an ADR.
+
+Future conversations must reconstruct project understanding from repository documents rather than relying on previous chat history.
+
+---
+
+# 21. Future Direction
+
+ATF is intended to become an extensible AI framework capable of supporting:
+
+* Local LLM
+* LM Studio
+* Ollama
+* vLLM
+* OpenAI API
+* Gemini
+* Claude
+* Future Model Providers
+
+Changing LLM providers must not require architectural redesign.
+
+---
+
+# ADR-000 Conclusion
+
+This document establishes the constitution of the project.
+
+All future design decisions must remain consistent with the principles defined in ADR-000 unless superseded by a newer ADR.

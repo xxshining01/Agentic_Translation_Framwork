@@ -1,0 +1,56 @@
+# ADR-006: Event Bus and Message Routing
+
+**Status:** Proposed
+**Date:** 2026-07-09
+**Decision Maker:** Product Owner + AI Solution Architect
+
+---
+
+## 1. Context and Problem Statement
+
+จาก ADR-002 (Workflow) และ ADR-005 (Data Contract) เรามีลำดับขั้นตอนและรูปแบบข้อมูลที่ชัดเจนแล้ว ปัญหาคือเราจะเชื่อม Agent เข้าด้วยกันอย่างไร?
+
+หากเราใช้การเขียนโค้ดแบบ **Point-to-Point (Direct Function Call)** เช่น ให้ `Translator` เรียกฟังก์ชัน `Editor` ตรงๆ (Synchronous Call) ระบบจะเกิดปัญหาดังนี้:
+
+1. **Tight Coupling:** Agent จะผูกติดกันเกินไป ถ้า Editor พัง Translator จะค้างไปด้วย
+2. **Blocking I/O:** ระบบจะไม่สามารถทำงานแบบ Concurrency ได้เลย หากมีประโยคหนึ่งที่ต้องรอ API ของ AI ตอบกลับนาน ประโยคอื่นใน Batch จะถูกบล็อก (Block) ทั้งหมด
+3. **Hard to Retry:** การสั่ง Retry เฉพาะจุดทำได้ยากมาก เพราะ State ของระบบผูกติดอยู่กับ Call Stack ของโปรแกรม
+
+## 2. Decision
+
+เราตัดสินใจใช้สถาปัตยกรรม **Centralized Event Bus (Publish-Subscribe Pattern)** ควบคู่กับ **State Machine** ในการจัดการเส้นทางของข้อมูล
+
+1. **Event-Driven Routing:**
+* ระบบจะมี "ตัวกลาง" (Event Bus / Orchestrator) คอยรับส่งข้อความ
+* Agent จะไม่คุยกันเอง แต่จะสื่อสารผ่าน Event Bus เท่านั้น
+* เมื่อ Agent ทำงานเสร็จ จะส่ง Event ออกมา เช่น `TranslationCompleted` พร้อมแนบ JSON Payload
+
+
+2. **Asynchronous Processing:**
+* Agent ทุกตัวจะทำงานแบบ Asynchronous
+* ทันทีที่ `Translator` แปลประโยคที่ 1 เสร็จและส่ง Event ออกไป มันสามารถรับประโยคที่ 2 มาแปลต่อได้ทันที โดยไม่ต้องรอให้ `Editor` ทำงานประโยคที่ 1 เสร็จ (Non-blocking)
+
+
+3. **State Store:**
+* สถานะของแต่ละประโยค (Pending, Translated, QA_Failed, Done) จะถูกบันทึกแยกไว้ใน Database หรือ State Store (เช่น Supabase หรือ In-memory DB) เพื่อความปลอดภัยของข้อมูล
+
+
+
+## 3. Rationale
+
+การใช้ Event Bus คือกุญแจสำคัญที่ทำให้ระบบรองรับ **Concurrency Architecture** ได้อย่างเต็มรูปแบบ เราสามารถรันหลาย Batch พร้อมกัน หรือแม้กระทั่งแตกประโยคใน Batch เดียวกันไปประมวลผลขนานกันได้ สิ่งนี้ช่วยลด Latency โดยรวมของระบบลงอย่างมหาศาล
+
+นอกจากนี้ การแยก State ออกจากตัว Agent ทำให้ระบบมีคุณสมบัติ **Fault Tolerance** (ทนทานต่อความล้มเหลว) หาก API ของ LLM ตัวใดตัวหนึ่งล่ม ระบบก็แค่หยุดรออยู่สถานะเดิม และเมื่อ API กลับมาใช้งานได้ ก็สามารถ Resume งานต่อจาก Event ล่าสุดได้ทันทีโดยที่ข้อมูลไม่สูญหาย
+
+## 4. Consequences
+
+**Pros:**
+
+* **Decoupling 100%:** Agent ไม่จำเป็นต้องรู้จักกันเลย ทำให้สามารถสลับโมเดล AI (เช่น เปลี่ยนจาก GPT เป็น Claude หรือ Gemini) ในแต่ละ Stage ได้อย่างอิสระ
+* **Scalability:** รองรับการ Scale ระบบในอนาคต เช่น การเพิ่มจำนวน Editor Agent ให้ทำงานขนานกันเพื่อระบายคิว
+* **Observability:** สามารถทำ Dashboard ติดตามสถานะของทุกประโยคแบบ Real-time ได้ง่าย
+
+**Cons:**
+
+* ความซับซ้อนของฝั่ง Python จะเพิ่มขึ้นมาก จำเป็นต้องจัดการเรื่อง Queue, Async/Await และ Deadlock
+* ต้องมีการวางระบบ Error Handling ในระดับ Message Queue ที่รัดกุม เช่น ทิ้ง Event ที่ค้างนานเกินไป (Timeout)

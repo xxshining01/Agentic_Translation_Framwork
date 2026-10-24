@@ -1,0 +1,75 @@
+{
+  "Characters": {
+    "Hero": {
+      "th": "ฮีโร่",
+      "type": "ProperNoun",
+      "role_category": "Core",
+      "analysis_target": true,
+      "enforce": true,
+      "aliases": [
+        {
+          "name": "The Chosen One",
+          "th": "ผู้ถูกเลือก"
+        }
+      ],
+      "reason": "Protagonist"
+    },
+    "Villain": {
+      "th": "จอมมาร",
+      "type": "ProperNoun",
+      "role_category": "Main",
+      "analysis_target": true,
+      "enforce": true,
+      "aliases": [],
+      "reason": "Antagonist"
+    }
+  },
+  "Places": {
+    "Start Village": {
+      "th": "หมู่บ้านเริ่มต้น",
+      "type": "ProperNoun",
+      "enforce": true
+    },
+    "Capital City": {
+      "th": "นครหลวง",
+      "type": "ProperNoun",
+      "enforce": true
+    }
+  },
+  "Items": {
+    "Potion": {
+      "th": "โพชัน",
+      "type": "CommonNoun",
+      "enforce": true
+    },
+    "Iron Sword": {
+      "th": "ดาบเหล็ก",
+      "type": "CommonNoun",
+      "enforce": true
+    }
+  },
+  "Skills": {
+    "Fireball": {
+      "th": "ลูกไฟ",
+      "type": "ProperNoun",
+      "enforce": true
+    },
+    "Heal": {
+      "th": "รักษา",
+      "type": "CommonNoun",
+      "enforce": true
+    }
+  },
+  "System": {
+    "Gold": {
+      "th": "โกลด์",
+      "type": "Currency",
+      "enforce": true
+    },
+    "Level Up": {
+      "th": "เลเวลอัป",
+      "type": "SystemTerm",
+      "enforce": true
+    }
+  }
+}
