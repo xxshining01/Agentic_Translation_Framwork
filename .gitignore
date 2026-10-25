@@ -102,6 +102,7 @@ run.py
 run_pipeline.py
 
 # Game Data & Large CSVs (Keep only template files)
+data/images/
 data/processed_dialogues*.csv
 data/plugins_texts.csv
 data/plugins_texts_*.csv

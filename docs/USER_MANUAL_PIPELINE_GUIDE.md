@@ -239,7 +239,93 @@ graph TD
 
 ---
 
-## 🚨 หมวดที่ 6: คู่มือการแก้ไขปัญหาและรับมือข้อผิดพลาด (Troubleshooting Playbook)
+## 🖼️ หมวดที่ 6: การแปลภาพกราฟิกในเกม (Image Localization Manual: Photoshop Hybrid Workflow)
+
+มาตรฐานการแปลภาพกราฟิกของ ATF (อ้างอิงตาม ADR-026 ถึง ADR-034) ใช้แนวคิด **Photoshop Hybrid Workflow** โดยแบ่งหน้าที่ระหว่าง **AI Automation** (ทำหน้าที่สแกน คัดกรอง แกะข้อความ ทำตาราง และเข้ารหัสเข้าเกม) ร่วมกับ **Human Artistry** (ผู้ใช้แต่งภาพ จัดวาง Typography และแสงเงาใน Adobe Photoshop อย่างอิสระ 100%)
+
+### โครงสร้างโฟลเดอร์ทำงานของภาพ (Image Directory Layout)
+```text
+data/images/ (หรือ <output_dir>/images/)
+├── raw/                  # โฟลเดอร์เก็บภาพต้นฉบับ .png ที่ผ่านการสแกนและมี Text
+├── translated/           # โฟลเดอร์ที่ผู้ใช้นำภาพ .png ที่แต่งเสร็จจาก Photoshop มาวาง
+├── unique_dialogues.csv  # ตารางรวมข้อความที่ไม่ซ้ำกัน สำหรับแปลครั้งเดียวและใช้ Copy-Paste
+├── image_dialogues.csv   # ตารางแคตตาล็อกระบุภาพ พิกัด และข้อความทั้งหมด
+└── ocr_corrections.json  # พจนานุกรมกฎคำแก้ผิดอัตโนมัติของ OCR
+```
+
+---
+
+### ขั้นตอนการทำงาน 3 สเต็ปหลัก (The 3-Step Execution Workflow)
+
+#### 🔹 สเต็ปที่ 1: สแกนและคัดกรองเฉพาะภาพที่มี Text (Image Scanning & Noise Purge)
+ระบบจะทำการค้นหาและคัดกรองภาพทั้งเกม แยกภาพที่มีตัวหนังสือ (แชตมือถือ, หน้าจอสอนเล่น, UI, เมนู) ออกจากภาพที่เป็น CG ลายเส้น, สไปรต์ตัวละคร, และ Texture พื้นหลังโดยอัตโนมัติ ทำให้ผู้ใช้ไม่ต้องเสียเวลางมหาเองทีละภาพ
+
+1. **ถอดรหัสภาพจากเกม (.rpgmvp -> .png):**
+   - **PowerShell / CMD:**
+     ```bash
+     python localize_images.py decrypt --folder pictures
+     ```
+2. **สแกนและคัดแยกเฉพาะภาพที่มี Text:**
+   - **PowerShell / CMD:**
+     ```bash
+     python localize_images.py scan --decrypt
+     ```
+3. **ตรวจสอบและลบภาพที่ไม่ต้องการแปล:**
+   - ผู้ใช้สามารถเปิดโฟลเดอร์ `raw/` ดูพรีวิว หากมีภาพไหนที่ไม่ต้องการแปล สามารถกดลบไฟล์ `.png` นั้นทิ้งได้ทันที
+   - จากนั้นสั่ง Sync เพื่ออัปเดตตารางให้ตรงกับไฟล์ที่เหลืออยู่บนดิสก์จริง:
+     ```bash
+     python localize_images.py sync
+     ```
+
+---
+
+#### 🔹 สเต็ปที่ 2: แกะ Text, ทำตาราง Unique, และแปลข้อความ (OCR & Translation Bridge)
+ระบบจะสกัดข้อความภาษาอังกฤษออกมาเป็น Spreadsheet เพื่อให้ผู้ใช้สามารถ Copy-Paste ไปแปลเป็นภาษาไทยได้อย่างสะดวกสบาย โดยไม่ต้องนั่งพิมพ์ข้อความจากภาพเองทีละตัว
+
+1. **สกัดข้อความจากภาพทั้งหมดลงตาราง (Catalog):**
+   - **PowerShell / CMD:**
+     ```bash
+     python localize_images.py catalog --rebuild
+     ```
+2. **ซ่อมแซมคำผิด Homoglyphs และจัดช่องว่างวรรคตอนอัตโนมัติ (Repair):**
+   - **PowerShell / CMD:**
+     ```bash
+     python localize_images.py repair
+     ```
+3. **ยุบรวมข้อความซ้ำเป็น Unique Spreadsheet (Dedupe):**
+   - คำสั่งนี้จะสกัดข้อความที่ไม่ซ้ำกันออกมาเป็น `unique_dialogues.csv`:
+     ```bash
+     python localize_images.py dedupe
+     ```
+4. **เปิดแปลและ Copy-Paste ข้อความ:**
+   - เปิดไฟล์ `unique_dialogues.csv` ด้วย Excel หรือโปรแกรม Spreadsheet
+   - ใส่คำแปลภาษาไทยลงในคอลัมน์ `Thai_Text` (แปลเพียง 1 ครั้งต่อ 1 ข้อความ แม้ข้อความนั้นจะปรากฏในภาพ 20 ภาพก็ตาม)
+5. **กระจายคำแปลกลับสู่ทุกภาพที่ซ้ำกัน (Propagate):**
+   - **PowerShell / CMD:**
+     ```bash
+     python localize_images.py propagate
+     ```
+6. **ตกแต่งภาพใน Adobe Photoshop (Human Artistry):**
+   - เปิดไฟล์ภาพต้นฉบับจากโฟลเดอร์ `raw/` ใน Adobe Photoshop
+   - Copy คำแปลภาษาไทยจาก `unique_dialogues.csv` หรือ `image_dialogues.csv` ไปวางลงใน Text Layer ของ Photoshop
+   - ปรับแต่งฟอนต์, สี, ขนาด, และ Layer Styles (Drop Shadow, Stroke, Gradient) ได้อย่างอิสระ 100% ตามที่ต้องการ
+   - บันทึกไฟล์ภาพภาษาไทยเป็นชื่อเดิมนามสกุล `.png` แล้วนำไปวางไว้ในโฟลเดอร์ `translated/`
+
+---
+
+#### 🔹 สเต็ปที่ 3: เข้ารหัสและอัดภาพภาษาไทยกลับเข้าสู่เกมจริง (In-Game Deployment)
+เมื่อตกแต่งภาพเสร็จแล้ว คำสั่งนี้จะนำภาพ `.png` ทั้งหมดในโฟลเดอร์ `translated/` ไปเข้ารหัสกลับเป็นไฟล์ของเกม และส่งเข้าตัวเกมจริงทันที พร้อมระบบสำรองไฟล์เดิมอัตโนมัติ
+
+- **คำสั่งเข้ารหัสและฉีดเข้าเกม (Encrypt & Inject):**
+  - **PowerShell / CMD:**
+    ```bash
+    python localize_images.py encrypt --folder pictures
+    ```
+- **Playability Verification:** เปิดเกมจริงเพื่อตรวจสอบภาพที่แปลแล้วในฉากจริง
+
+---
+
+## 🚨 หมวดที่ 7: คู่มือการแก้ไขปัญหาและรับมือข้อผิดพลาด (Troubleshooting Playbook)
 
 | อาการ / ปัญหา | สาเหตุรากเหง้า (Root Cause) | แนวทางแก้ไขตามมาตรฐาน (Standard Remedy) |
 | :--- | :--- | :--- |
@@ -248,3 +334,4 @@ graph TD
 | **Control Codes ในเกมเพี้ยน / ตัวหนังสือหลุดสี** | AI เผลอแปลหรือลบ In-line Code | ตรวจสอบผ่าน `MessageCodeMasker` ต้องแปลงเป็น Semantic XML Tags ก่อนส่ง AI เสมอ |
 | **Web Bridge หลุดการเชื่อมต่อ** | เบราว์เซอร์ค้างหรือหน้าเว็บ ChatGPT ปิด | ตรวจสอบผ่าน `/bridge/status` หาก userscript หลุด ให้ระบบหยุดรอ (No Timeout) จนกว่าจะต่อติด |
 | **ตรวจพบตัวละครใหม่กลางคัน** | ผู้พูดตกสำรวจจาก Glossary | หยุดการแปลชั่วคราว ดึงเข้า Stage B4 สกัด Profile และลงทะเบียน Glossary ก่อนรันต่อ |
+| **ภาพในเกมไม่แสดงเป็นภาษาไทยหลังฉีด** | ชื่อไฟล์ใน `translated/` สะกดไม่ตรงกับต้นฉบับ หรือ Encryption Key ผิด | ตรวจสอบชื่อไฟล์ `.png` ว่าตรงกับภาพต้นฉบับทุกตัวอักษร และตรวจว่า `System.json` มี Encryption Key ครบถ้วน |

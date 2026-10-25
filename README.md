@@ -35,6 +35,11 @@ graph LR
    - สำหรับงานอัปเดตแพตช์เกมใหม่ ระบบจะตรวจจับเฉพาะบรรทัดใหม่ที่เพิ่มเข้ามา (Delta Rows) และปกป้องบทแปลเดิมไว้ 100% โดยไม่ส่งไปแปลซ้ำ
 6. **Atomic State Checkpointing & Zero-Skip Guarantee:**
    - ระบบบันทึกความคืบหน้าลงดิสก์ทุก Batch งาน พร้อมระบบกู้คืนอัตโนมัติ (Resume) เมื่อเกิดข้อผิดพลาด ป้องกันข้อมูลสูญหาย 100%
+7. **Photoshop Hybrid Image Localization & OCR Bridge (ADR-034):**
+   - สแกนคัดแยกเฉพาะภาพที่มี Text จากภาพนับพันภาพในเกมอัตโนมัติ ตัด CG/Sprite ออก 100%
+   - สกัดข้อความภาษาอังกฤษด้วย Deep Learning OCR ยุบรวมข้อความซ้ำเป็น Unique Spreadsheet ให้แปลเพียง 1 ครั้งต่อ 1 ข้อความ
+   - รองรับการทำงานร่วมกับ Adobe Photoshop สำหรับผู้ใช้ที่ต้องการจัดวาง Typography และแต่งภาพด้วยตนเอง
+   - ระบบ Re-encryption อัตโนมัติ แปลงภาพ `.png` ภาษาไทยกลับเป็นไฟล์เกม (`.rpgmvp`) ฉีดเข้าเกมจริงทันที
 
 ---
 
@@ -46,6 +51,11 @@ Agentic Translation Framework (ATF)/
 │   └── skills/
 │       └── atf-master-pipeline/   # คู่มือปฏิบัติการของ Agent
 ├── data/                    # โฟลเดอร์ฐานข้อมูลและเทมเพลต
+│   ├── images/              # โฟลเดอร์จัดการแปลภาพกราฟิก (Image Localization)
+│   │   ├── raw/             # ภาพต้นฉบับ .png ที่สแกนพบ Text
+│   │   ├── translated/      # ภาพภาษาไทยที่แต่งเสร็จจาก Photoshop
+│   │   ├── unique_dialogues.csv # ตารางรวมข้อความซ้ำ แปลรอบเดียว
+│   │   └── image_dialogues.csv  # ตารางแคตตาล็อกระบุภาพและข้อความทั้งหมด
 │   ├── project_manifest.template.json  # เทมเพลต Manifest ของโปรเจกต์
 │   ├── plugins_texts.template.csv      # เทมเพลต CSV ข้อความ UI เมนู
 │   └── tlas/
@@ -63,7 +73,7 @@ Agentic Translation Framework (ATF)/
 │       ├── core/            # เครื่องมือหลัก (Masker, Splitter, Auditor, Glossary)
 │       ├── memory/          # Context Engine ค้นหาบริบทฉาก
 │       ├── parsers/         # ตัวอ่านไฟล์เกม (CSV, Ren'Py, RPG Maker)
-│       └── tools/           # สคริปต์ปฏิบัติการทั้งหมด (Bridge, Profiler, Runner)
+│       └── tools/           # สคริปต์ปฏิบัติการทั้งหมด (Bridge, Profiler, Runner, Image Localizer)
 ├── requirements.txt         # รายการแพ็กเกจ Python ที่จำเป็น
 ├── setup_paths.py           # สคริปต์ตั้งค่าตำแหน่งไฟล์ของโปรเจกต์
 ├── trace_scenes.py          # สคริปต์สกัดฉากเนื้อเรื่อง
@@ -72,6 +82,7 @@ Agentic Translation Framework (ATF)/
 ├── import_glossary.py       # สคริปต์นำเข้าคำศัพท์สู่ Glossary
 ├── extract_plugins.py       # สคริปต์สกัดข้อความ UI เมนูจาก plugins.js
 ├── inject_plugins.py        # สคริปต์ฉีดคำแปลกลับเข้า plugins.js
+├── localize_images.py       # สคริปต์หลักจัดการแปลภาพกราฟิก (Scan, Catalog, Dedupe, Encrypt)
 ├── sync_checkpoint.py       # สคริปต์ซิงค์คำแปลจาก Checkpoint ลง CSV
 ├── verify_integrity.py      # สคริปต์ตรวจสอบความสมบูรณ์ของระบบ
 └── translate.py             # สคริปต์หลักสั่งเริ่มกระบวนการแปล
@@ -256,6 +267,32 @@ python inject_plugins.py
 
 ---
 
+### 🖼️ การแปลภาพกราฟิกในเกม (Image Localization: Photoshop Hybrid Workflow)
+
+ATF รองรับท่อส่งข้อมูลการแปลภาพแบบ Hybrid ร่วมกับ Adobe Photoshop (ADR-026 ถึง ADR-034):
+
+1. **สแกนและคัดกรองเฉพาะภาพที่มี Text (ตัด CG/Sprite ออกอัตโนมัติ):**
+   ```bash
+   python localize_images.py scan --decrypt
+   ```
+2. **สกัด Text ลงตารางและยุบรวมคำซ้ำ (Catalog, Repair & Dedupe):**
+   ```bash
+   python localize_images.py catalog --rebuild
+   python localize_images.py repair
+   python localize_images.py dedupe
+   ```
+3. **แปลใน `unique_dialogues.csv` แล้วกระจายคำแปลกลับสู่ทุกภาพ:**
+   ```bash
+   python localize_images.py propagate
+   ```
+4. **เปิดไฟล์ใน `raw/` แต่งใน Photoshop แล้วเซฟภาพภาษาไทย (.png) ลงโฟลเดอร์ `translated/`**
+5. **เข้ารหัสและอัดภาพภาษาไทยกลับเข้าตัวเกม (.png -> .rpgmvp):**
+   ```bash
+   python localize_images.py encrypt --folder pictures
+   ```
+
+---
+
 ## 📋 สรุปคำสั่งที่ใช้งานบ่อย (Cheat Sheet)
 
 | การทำงาน | คำสั่ง PowerShell / CMD |
@@ -272,6 +309,11 @@ python inject_plugins.py
 | **เริ่มแปล (เฉพาะแถวใหม่)** | `python translate.py --empty-only` |
 | **ซิงค์ Checkpoint สู่ CSV** | `python sync_checkpoint.py` |
 | **ฉีดคำแปลเข้า plugins.js** | `python inject_plugins.py` |
+| **สแกนคัดแยกภาพที่มี Text** | `python localize_images.py scan --decrypt` |
+| **สกัด Text ภาพลงตาราง** | `python localize_images.py catalog --rebuild` |
+| **ยุบรวมข้อความภาพซ้ำ (Dedupe)** | `python localize_images.py dedupe` |
+| **กระจายคำแปลภาพที่ซ้ำกัน** | `python localize_images.py propagate` |
+| **อัดภาพภาษาไทยกลับเข้าเกม** | `python localize_images.py encrypt --folder pictures` |
 
 ---
 
