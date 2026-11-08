@@ -76,7 +76,7 @@ def main():
     subparsers.add_parser("setup", help="ตั้งค่าพื้นที่ทำงาน ค้นหาเกม ไฟล์ต้นฉบับ และกำหนด project_manifest.json")
 
     # 1. bridge
-    subparsers.add_parser("bridge", help="เปิดเซิร์ฟเวอร์ ChatGPT Web Bridge (พอร์ต 5000 - อิสระจาก Pipeline)")
+    subparsers.add_parser("bridge", help="เปิดเซิร์ฟเวอร์ ChatGPT Web Bridge (พอร์ต 8765 - อิสระจาก Pipeline)")
 
     # 3a. prepare-scenes
     subparsers.add_parser("prepare-scenes", help="[3a] สกัดฉากและชุด Dialogue สู่ scene_packets.json")
@@ -146,7 +146,7 @@ def main():
 
     # --- 1. BRIDGE (INDEPENDENT) ---
     elif cmd == "bridge":
-        print("\n🌐 [ATF] กำลังเริ่ม ChatGPT Web Bridge Server (พอร์ต 5000)...")
+        print("\n🌐 [ATF] กำลังเริ่ม ChatGPT Web Bridge Server (พอร์ต 8765)...")
         print("💡 อย่าลืมเปิดแท็บ https://chatgpt.com และเปิดใช้งาน Tampermonkey Userscript")
         sys.exit(run_script("chatgpt_bridge_server.py", unknown))
 

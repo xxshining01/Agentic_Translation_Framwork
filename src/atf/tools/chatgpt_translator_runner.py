@@ -2346,7 +2346,23 @@ Return ONLY the JSON array. No conversational text."""
                     direct_copied_non_disp += 1
                 continue
 
-            if init_text.strip():
+            # ตรวจสอบว่าข้อความนี้ได้รับการแปลแล้วจริงหรือไม่ (Is already translated to Thai?)
+            # แถวจะถือว่า "ยังไม่ได้แปล" (ต้องส่งให้ LLM แปล) เมื่อ:
+            # 1. init_text ว่างเปล่า
+            # 2. init_text ยังเป็นข้อความเดิมเหมือน orig_text (ภาษาญี่ปุ่นดั้งเดิมที่ Translator++ ใส่มา)
+            # 3. init_text ยังมีอักษรภาษาญี่ปุ่น (Hiragana, Katakana, CJK) และไม่มีภาษาไทย
+            is_untranslated = False
+            if not init_text.strip():
+                is_untranslated = True
+            elif init_text.strip() == orig_text.strip():
+                is_untranslated = True
+            else:
+                has_jp = bool(re.search(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]', init_text))
+                has_th = bool(re.search(r'[\u0e00-\u0e7f]', init_text))
+                if has_jp and not has_th:
+                    is_untranslated = True
+
+            if not is_untranslated:
                 already_filled_count += 1
                 continue
 
@@ -2636,7 +2652,18 @@ Return ONLY the JSON array. No conversational text."""
                 continue
             if disp_idx != -1 and len(row) > disp_idx and row[disp_idx].strip().lower() != "yes":
                 continue
+            is_untrans = False
             if not init_text or not init_text.strip():
+                is_untrans = True
+            elif init_text.strip() == orig_text.strip():
+                is_untrans = True
+            else:
+                has_jp = bool(re.search(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]', init_text))
+                has_th = bool(re.search(r'[\u0e00-\u0e7f]', init_text))
+                if has_jp and not has_th:
+                    is_untrans = True
+
+            if is_untrans:
                 spk = row[speaker_idx] if speaker_idx != -1 and len(row) > speaker_idx and row[speaker_idx] else "UI/Plugin"
                 rle = row[role_idx] if role_idx != -1 and len(row) > role_idx and row[role_idx] else "UI/Plugin"
                 untranslated.append({
