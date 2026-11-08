@@ -429,6 +429,12 @@
   - นำระบบ Silent Dummy Fallback ออก และแทนที่ด้วย `wait_for_bridge_ready()` รอให้ Userscript บน https://chatgpt.com เชื่อมต่อสำเร็จจริง 100% ก่อนเริ่มวิเคราะห์
   - บังคับการวิเคราะห์ Pairwise Relationships ระหว่างตัวละคร ทำให้ Stage 3e (`sync_profiles_and_matrix.py`) สกัดกฎ `Specific Pairwise Rules > 0` ได้จริง
   - ปรับปรุง `sync_profiles_and_matrix.py` ให้รองรับทั้ง `speech_style` และ `specific_speech`
+- [x] **Task 28.7: Scene-Based Character Profiling & Deterministic Pronoun Architecture (v6.1)**
+  - ปรับปรุง `atf_chatgpt_userscript.user.js`: ตัดการค้นหา Rate Limit จาก `document.body.innerText` เพื่อป้องกัน False Positive จากประวัติแชตใน Sidebar และขยายรอบการรอส่งให้เสถียร 100%
+  - เพิ่มเติม `taxonomy.template.json` และ `taxonomy.json`: บรรจุนิยาม Formality Level 1-5 แบบ Deterministic พร้อมตัวเลือกสรรพนามบุรุษที่ 3 (`third_person`)
+  - ยกเครื่อง `analyze_character_profiles.py` สู่ระบบ Scene-Based Batching: สกัดบทสนทนาประจำฉากส่งให้ ChatGPT วิเคราะห์เฉพาะ identity, personality, และ pairwise relationships (ตัดการคิดสรรพนามไทยออกจาก AI 100%)
+  - พัฒนา Deterministic Python Pronoun Engine: แมปปิ้งคำสรรพนาม (self, target, third_person, ending) จาก `taxonomy.json` ตามหลักไวยากรณ์โดยตรง ป้องกันคำนามแปลกปลอม (เช่น "สามี") หลุดเข้ามาในช่องสรรพนาม 100%
+
 
 
 

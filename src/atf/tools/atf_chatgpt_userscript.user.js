@@ -325,44 +325,22 @@
 
     // ตรวจสอบการติด Rate Limit / Cooldown ระดับบัญชีหรือช่วงเวลา (ที่ต้องพักคอย ไม่ใช่แค่เปิด New Chat)
     function checkAccountRateLimit() {
-        const bodyText = (document.body.innerText || "").toLowerCase();
+        // จำกัดขอบเขตเฉพาะกล่องแจ้งเตือนข้อผิดพลาดจริง (Alerts / Modals / Banners ใน main หรือ dialog)
+        // ⚠️ ห้ามตรวจ document.body.innerText ทั่วทั้งหน้าจอเด็ดขาด เพื่อป้องกัน False Positive จากแถบประวัติแชต (Sidebar)
+        const activeContainers = document.querySelectorAll('main [role="alert"], [role="dialog"], div[data-testid*="modal"], main div[class*="banner"], main div[class*="error"], main div[class*="notice"]');
         const accountLimitKeywords = [
             "try again after",
             "ลองใหม่อีกครั้งหลังจาก",
             "too many requests",
-            "คำขอมากเกินไป",
-            "rate limit",
-            "usage cap",
-            "usage limit",
-            "current usage limit",
-            "ขีดจำกัดการใช้งาน",
             "you've reached your limit",
             "you have reached your limit",
             "reached your limit",
-            
             "คุณถึงขีดจำกัดแล้ว",
-            "ขีดจำกัดข้อความ",
-            "message limit",
-            "limit resets",
-            "limit will reset",
-            "resets after",
-            "resets at",
-            "รีเซ็ตหลังจาก",
-            "รีเซ็ตใน",
-            "responses will use another model",
-            "สลับไปใช้โมเดลอื่น",
             "reached your free usage limit",
             "reached the free usage limit"
         ];
 
-        for (const kw of accountLimitKeywords) {
-            if (bodyText.includes(kw)) {
-                return { isRateLimited: true, reason: kw };
-            }
-        }
-
-        const alerts = document.querySelectorAll('[role="alert"], div[class*="banner"], div[class*="warning"], div[class*="error"], div[class*="notice"]');
-        for (const el of alerts) {
+        for (const el of activeContainers) {
             const t = (el.innerText || "").toLowerCase();
             for (const kw of accountLimitKeywords) {
                 if (t.includes(kw)) {
@@ -371,13 +349,16 @@
             }
         }
 
-        // ตรวจสอบกรณีปุ่ม Send ถูก Disabled หรือมีข้อความแจ้งเตือนใกล้กล่องพิมพ์
+        // ตรวจสอบกรณีปุ่ม Send ถูก Disabled ร่วมกับมีแถบแจ้งเตือนที่ Footer ของ Main
         const sendBtn = getSendButton();
         if (sendBtn && (sendBtn.disabled || sendBtn.getAttribute("aria-disabled") === "true")) {
-            const footerText = (document.querySelector('main footer')?.innerText || "").toLowerCase();
-            for (const kw of accountLimitKeywords) {
-                if (footerText.includes(kw)) {
-                    return { isRateLimited: true, reason: "Send button disabled by limit banner" };
+            const footerAlerts = document.querySelectorAll('main footer [role="alert"], main footer div[class*="banner"]');
+            for (const el of footerAlerts) {
+                const footerText = (el.innerText || "").toLowerCase();
+                for (const kw of accountLimitKeywords) {
+                    if (footerText.includes(kw)) {
+                        return { isRateLimited: true, reason: "Send button disabled by limit banner: " + el.innerText.trim() };
+                    }
                 }
             }
         }
@@ -747,12 +728,13 @@
                 const inputNow = findPromptInput();
                 const hasText = inputNow && (inputNow.value || inputNow.textContent || "").trim().length > 0;
 
-                // ตรวจสอบกรณี Silent Block: จะถือว่าโดนบล็อกได้ก็ต่อเมื่อ "ยังมีข้อความค้างอยู่ในกล่องพิมพ์" เท่านั้น!
-                if (retryCycle >= 28 && !isGenerating() && !hasNewResponse) {
+                // ตรวจสอบกรณี Silent Block: จะถือว่าโดนบล็อกได้ก็ต่อเมื่อ "ยังมีข้อความค้างอยู่ในกล่องพิมพ์" และพยายามส่งเกิน 45 รอบ (~27 วินาที)
+                if (retryCycle >= 45 && !isGenerating() && !hasNewResponse) {
                     if (hasText) {
-                        console.warn("[ATF Bridge] Send button is blocked / unresponsive! ChatGPT silent rate limit active.");
+                        const limitStatus = checkAccountRateLimit();
+                        console.warn("[ATF Bridge] Send button is blocked / unresponsive! limitStatus:", limitStatus);
                         if (inputNow) clearPromptInput(inputNow); // ล้างกล่องข้อความทิ้งทันที 100% ไม่ให้มีข้อความค้างสะสม
-                        throw new Error("ChatGPT Send Button Blocked (Silent Usage Limit Active).");
+                        throw new Error(limitStatus.isRateLimited ? `ChatGPT Rate Limit Active: ${limitStatus.reason}` : "ChatGPT Send Button Blocked or Unresponsive.");
                     } else {
                         // หากไม่มีข้อความค้างอยู่ในกล่องแล้ว แปลว่าข้อความถูกกดส่งออกไปเรียบร้อยแล้ว
                         console.log("[ATF Bridge] Prompt input is clear (sent). Transitioning to response wait loop.");

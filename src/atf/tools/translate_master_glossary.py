@@ -269,3 +269,4 @@ Return ONLY the raw JSON object."""
 
 if __name__ == "__main__":
     translate_master_glossary()
+

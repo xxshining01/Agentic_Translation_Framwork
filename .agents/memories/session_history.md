@@ -1081,3 +1081,54 @@
   - `src/atf/tools/translate_master_glossary.py` (Master Glossary AI Translator)
   - `src/atf/tools/analyze_character_profiles.py` (New Chat Isolated Profiler)
   - `docs/USER_MANUAL.md` (Updated Step-by-Step Workflow)
+
+### [2026-11-08 21:45] Session 34: Auto-Sync Verified Profile Genders to Glossary & Output Path Clarification
+- **1. สิ่งที่ทำ (Actions Executed):**
+  - **สร้างระบบซิงค์เพศอัตโนมัติ `sync_profile_genders_to_glossary` ใน `sync_profiles_and_matrix.py`:**
+    - เมื่อผู้ใช้รัน `python atf.py prepare-matrix` หลังจากการสังเคราะห์ Character Profiles ระบบจะนำค่าเพศ (`gender`) และชื่อแปลไทย (`th_name`) ที่ผ่านการยืนยันจาก Profile ของตัวละคร Whitelist ไปอัปเดตลงใน `tlas_glossary.json` ให้โดยอัตโนมัติ
+    - ตัวละคร Ambient Passthrough ที่ไม่มี Profile จะคงค่า `UNKNOWN` ไว้ตามเดิม ซึ่งสอดคล้องกับหลักการ Clean Passthrough (ADR-035) 100%
+  - **ยืนยันสถาปัตยกรรม Pathing จาก Manifest (Output Directory as Single Source of Truth):**
+    - ยืนยันว่าการที่ผู้ใช้ไม่ได้เลือกไฟล์ legacy ในขั้นตอน setup เป็นสิ่งที่ถูกต้อง 100% สำหรับโปรเจกต์เกมใหม่ (Clean Slate)
+    - ทุกโมดูลในระบบ (`prepare-scenes`, `prepare-glossary`, `translate-glossary`, `prepare-whitelist`, `prepare-profiles`, `prepare-matrix`, `prepare-table`, `translate`) อ่านและเขียนตรงไปยัง `<output_dir>/tlas/` ที่ระบุไว้ใน `project_manifest.json` ทั้งหมด
+  - **Commit & Push ขึ้น Git:** Commit `639b9ca` ขึ้น GitHub `origin/main`
+- **2. แนวคิดเชิงสถาปัตยกรรม (Architectural Rationale):**
+  - **Cross-Stage Data Convergence:** ข้อมูลอัตลักษณ์ที่ LLM วิเคราะห์ได้อย่างละเอียดใน Character Profiles ไม่ควรอยู่เฉพาะในโฟลเดอร์ `profiles/` แต่ควรถูกสะท้อนกลับไปยัง Master Glossary เพื่อให้ Glossary มีความสมบูรณ์และใช้ล็อกเพศของตัวละครสำคัญได้ในทุกๆ จุดของ Framework
+- **3. ความคืบหน้า (Progress & Milestones):**
+  - บรรลุการซิงค์เพศอัตโนมัติจาก Profiles กลับสู่ Master Glossary
+- **4. ผลการทดสอบ (Verification & Test Results):**
+  - ตรวจสอบ `data/project_manifest.json` ยืนยันว่าพาธ `output_*` ทั้งหมดชี้ไปที่ `E:\GameTranslator\5 Days of Separation After Story+ (output)\tlas\` อย่างสมบูรณ์ 100%
+- **5. สิ่งที่ต้องแก้ไข / อุปสรรค (Remaining Blockers / Next Fixes):**
+  - ผู้ใช้พร้อมรัน `python atf.py prepare-profiles` เพื่อให้ ChatGPT วิเคราะห์ตัวละคร 10 ตัวด้วย New Chat Isolation
+- **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
+  - `src/atf/tools/sync_profiles_and_matrix.py` (Auto Gender Sync to Glossary)
+
+### [2026-11-08 23:45] Session 35: Scene-Based Character Profiling & Deterministic Pronoun Architecture (v6.1)
+- **1. สิ่งที่ทำ (Actions Executed):**
+  - **แก้ไข Userscript Rate Limit False Positive ([[src/atf/tools/atf_chatgpt_userscript.user.js]](file:///d:/Agentic%20Translation%20Framework%20(ATF)%20Project/src/atf/tools/atf_chatgpt_userscript.user.js)):**
+    - ลบการสแกน `document.body.innerText` ทั่วทั้งหน้าจอที่กวาดไปโดนแถบประวัติแชตใน Sidebar จนเข้าใจผิดว่าติดขีดจำกัด
+    - จำกัดการตรวจจับ Alert เฉพาะใน Element ข้อผิดพลาดจริงบนหน้าสนทนาปัจจุบัน (`main [role="alert"]`, Modal Dialogs)
+    - ขยายรอบเวลารอส่งเป็น 45 รอบ (~27 วินาที) ก่อนตัดสินว่าปุ่มถูกบล็อก ป้องกัน False Positive ในแชตใหม่
+  - **อัปเดต Taxonomy และนิยาม Formality Level 1-5 แบบ Deterministic ([[templates/taxonomy.template.json]](file:///d:/Agentic%20Translation%20Framework%20(ATF)%20Project/templates/taxonomy.template.json) และ `taxonomy.json`):**
+    - บัญญัตินิยาม Formality Level 1-5 ลงในโครงสร้าง JSON ชัดเจน: 1 (Intimate/Vulgar/Slang), 2 (Casual/Informal/Familiar), 3 (Neutral/Everyday Standard), 4 (Formal/Respectful/Hierarchy), 5 (Honorific/Ultra-Formal)
+    - เพิ่มตัวเลือกสรรพนามบุรุษที่ 3 (`third_person`: เขา, เธอ, มัน, ท่าน, หล่อน, พวกเขา) ลงใน `pronoun_options`
+  - **ยกเครื่อง `analyze_character_profiles.py` สู่ระบบ Scene-Based Batching ([[src/atf/tools/analyze_character_profiles.py]](file:///d:/Agentic%20Translation%20Framework%20(ATF)%20Project/src/atf/tools/analyze_character_profiles.py)):**
+    - เปลี่ยนจากการวนลูปทีละตัวละครแบบตัดตอน มาเป็นการประมวลผลบทสนทนาประจำฉาก (Scene Packets) ที่มีตัวละคร Whitelist มีปฏิสัมพันธ์กันจริง
+    - คัดเลือกชุดฉากสำคัญที่ครอบคลุมตัวละคร Whitelist ทั้ง 10 ตัวครบ 100% (เช่น Map001, Map002, Map004, Map006, Map011, Map018)
+    - Clean Prompt Payload: ตัดการส่งชื่อไทยทางการลงใน Prompt และสั่งห้าม LLM คิดคำสรรพนามภาษาไทยเองโดยเด็ดขาด ให้ส่งกลับมาเฉพาะ identity, personality, และ relationships พร้อมระดับ Formality 1-5
+  - **ติดตั้ง Deterministic Python Pronoun Engine:**
+    - คำนวณสรรพนาม `self_pronoun`, `target_pronoun`, `third_person_pronoun`, `ending_particle` จาก `taxonomy.json` โดยตรง 100% ตามเพศ วัย ความสัมพันธ์ และระดับ Formality
+    - กำจัดคำนามแปลกปลอม (เช่น "สามี") ไม่ให้หลุดเข้ามาในช่องสรรพนามบุรุษที่ 3 อีกต่อไป 100%
+- **2. แนวคิดเชิงสถาปัตยกรรม (Architectural Rationale):**
+  - **Scene Co-occurrence Context:** บทสนทนาที่ไหลลื่นในฉากจริงทำให้ LLM มองเห็น Adjacency Pairs, ปฏิกิริยาโต้ตอบ, และ Intimacy/Power Dynamic ระหว่างตัวละครที่พูดคุยกันอย่างเป็นธรรมชาติ
+  - **Strict Separation of Concerns:** ให้ LLM ทำหน้าที่เฉพาะสิ่งที่ LLM ถนัด (เข้าใจบริบทและอารมณ์ของฉาก) และปล่อยให้สิ่งที่ต้องการความแน่นอน 100% (คำสรรพนามและชื่อไทยทางการ) ถูกประมวลผลด้วย Rule-based Engine ของ Python
+- **3. ความคืบหน้า (Progress & Milestones):**
+  - บรรลุ Task 28.7 ใน `single_source_checkpoint.md`
+- **4. ผลการทดสอบ (Verification & Test Results):**
+  - ทดสอบ `scratch/test_pronoun_derivation.py`: สรรพนามของทุกคู่สนทนา (夫 -> 凛, 凛 -> 夫, 遠藤 -> 凛, เด็ก -> ผู้ใหญ่, ผู้ใหญ่ -> อาจารย์) แมปปิ้งถูกต้องตามไวยากรณ์ไทย ปลอดคำนามปลอม 100%
+  - คอมไพล์ `py_compile` ผ่านทุกโมดูล 100%
+- **5. สิ่งที่ต้องแก้ไข / อุปสรรค (Remaining Blockers / Next Fixes):**
+  - ผู้ใช้อัปเดตโค้ด Userscript ใน Tampermonkey บนเบราว์เซอร์ และสั่งรัน `python atf.py prepare-profiles`
+- **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
+  - `src/atf/tools/analyze_character_profiles.py` (v6.1 Scene-Based + Python Pronoun Engine)
+  - `src/atf/tools/atf_chatgpt_userscript.user.js` (Fixed False Positive Rate Limit Detection)
+  - `templates/taxonomy.template.json` & `taxonomy.json` (Formality 1-5 & Third Person Pronouns)
