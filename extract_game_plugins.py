@@ -437,8 +437,12 @@ def extract_all_plugins(game_dir: str, output_csv: str) -> bool:
         print("⚠️ ไม่พบข้อความส่วนติดต่อผู้ใช้ในปลั๊กอินของเกมนี้")
         return False
 
-    # สร้างไดเรกทอรีปลายทางหากยังไม่มี
+    # ตรวจสอบและจัดการพาธปลายทาง: ถ้าผู้ใช้ระบุเป็นโฟลเดอร์ ให้ต่อท้ายด้วย plugins_texts.csv อัตโนมัติ
     output_csv = os.path.abspath(output_csv.strip().strip('"').strip("'"))
+    if os.path.isdir(output_csv) or not output_csv.lower().endswith(".csv"):
+        output_csv = os.path.join(output_csv, "plugins_texts.csv")
+
+    # สร้างไดเรกทอรีปลายทางหากยังไม่มี
     os.makedirs(os.path.dirname(output_csv), exist_ok=True)
 
     header = ["Original", "Initial", "Filename", "Row", "Note", "Role", "Speaker", "Displayable"]
@@ -463,8 +467,14 @@ def extract_all_plugins(game_dir: str, output_csv: str) -> bool:
         print(f"   python atf.py setup")
         print("=" * 75 + "\n")
         return True
+    except PermissionError:
+        print(f"\n❌ [Permission Denied] ไม่สามารถเขียนไฟล์ได้ที่: {output_csv}")
+        print("💡 คำแนะนำในการแก้ไข:")
+        print("   1. หากไฟล์นี้ถูกเปิดค้างอยู่ในโปรแกรมอื่น (เช่น Microsoft Excel, Notepad) กรุณาปิดโปรแกรมก่อนรันใหม่")
+        print("   2. ตรวจสอบว่าไดรฟ์หรือโฟลเดอร์เป้าหมายอนุญาตให้เขียนไฟล์หรือไม่")
+        return False
     except Exception as e:
-        print(f"❌ เกิดข้อผิดพลาดในการเขียนไฟล์ CSV: {e}")
+        print(f"\n❌ เกิดข้อผิดพลาดในการเขียนไฟล์ CSV: {e}")
         return False
 
 
@@ -522,3 +532,4 @@ def interactive_main():
 
 if __name__ == "__main__":
     interactive_main()
+
