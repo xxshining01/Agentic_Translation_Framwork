@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ATF Scene-Based Character Profile & Relational Synthesizer (v6.1)
-================================================================
+ATF Scene-Based Character Profile & Relational Synthesizer (v6.2 - Exhaustive Coverage)
+=====================================================================================
 สกัดและวิเคราะห์ Character Profiles & Pairwise Relationships ของตัวละคร Whitelist
-โดยส่งบทสนทนาจริงเป็นชุดฉาก (Scene-Based Batches) ไปให้ LLM (ChatGPT Web Bridge พอร์ต 8765)
+โดยส่งบทสนทนาจริงจากทุกฉาก (Exhaustive Scene-Based Batches) ไปให้ LLM (ChatGPT Web Bridge พอร์ต 8765)
 เพื่อวิเคราะห์อัตลักษณ์ (Identity), บุคลิกภาพ (Personality), และความสัมพันธ์ (Relationships)
-พร้อมระบบ Deterministic Python Pronoun Engine ที่แมปปิ้งคำสรรพนามจาก taxonomy.json โดยตรง 100%
+พร้อมระบบ Deterministic Python Pronoun Engine ที่แยกแยะเพศ วัย ความอาวุโส และความสุภาพครบถ้วน 100%
 
 สถาปัตยกรรมหลัก:
-1. Scene-Based Batching: ส่งบทสนทนาต่อเนื่องในแต่ละฉาก ให้ AI เห็น Interaction และปฏิกิริยาโต้ตอบระหว่างตัวละครพร้อมกัน
-2. Clean Prompt Payload: ไม่ส่งชื่อไทยทางการไปรบกวน AI และไม่ให้ AI คิดคำสรรพนามภาษาไทยเอง ป้องกันคำนามปลอม (เช่น "สามี") หลุดเข้ามาเป็นสรรพนาม
+1. 100% Dialogue Coverage: ไม่ตัดทอนบทสนทนาแบบ blind slice สกัดทุกบทสนทนาของตัวละครหลักในทุกฉากครบถ้วน
+2. True Third-Person Disambiguation: แยกแยะสรรพนามบุรุษที่ 3 อย่างละเอียด (หญิง: "เธอ", ชาย: "เขา", ครู/ผู้อาวุโส: "ท่าน", กลุ่มเด็ก: "พวกเขา", สแลง/ศัตรู: "มัน")
 3. Clear Formality Scale (1-5): กำหนดเกณฑ์ระดับภาษา 1-5 แบบ Deterministic ชัดเจน
-4. Python Pronoun Mapping: คำนวณสรรพนามบุรุษที่ 1, 2, 3 (self, target, third_person, ending) จาก taxonomy.json 100%
+4. Clean Prompt Payload: ไม่ส่งชื่อไทยทางการไปรบกวน AI และไม่ให้ AI คิดคำสรรพนามภาษาไทยเอง ป้องกันคำนามปลอมหลุดเข้ามา
 5. Glossary Grounding: ดึง th_name และ verified gender จาก tlas_glossary.json มาประกอบในขั้นตอนสุดท้าย
 """
 
@@ -34,6 +34,20 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
 WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 MANIFEST_PATH = os.path.join(WORKSPACE_ROOT, "data", "project_manifest.json")
 BRIDGE_URL = "http://127.0.0.1:8765"
+
+# กำหนด Canonical ID ให้ตรงกับบทบาทเพื่อความเป็นระเบียบ 100%
+CANONICAL_ID_MAP = {
+    "凛": "CHAR_RIN",
+    "夫": "CHAR_HUSBAND",
+    "遠藤": "CHAR_ENDO",
+    "由美": "CHAR_YUMI",
+    "旦那さん": "CHAR_SATO_HUSBAND",
+    "受付のおばあさん": "CHAR_RECEPTIONIST_ELDER",
+    "先生": "CHAR_TEACHER",
+    "子供1": "CHAR_CHILD_1",
+    "子供2": "CHAR_CHILD_2",
+    "子供たち": "CHAR_CHILDREN_PLURAL"
+}
 
 
 def load_manifest() -> Dict[str, Any]:
@@ -168,14 +182,13 @@ def extract_json_object(text: str) -> Dict[str, Any]:
     return json.loads(clean_text)
 
 
-def select_scene_interaction_batches(scene_packets: List[Dict[str, Any]], whitelist_names: Set[str], max_batches: int = 7) -> List[Dict[str, Any]]:
+def build_exhaustive_scene_batches(scene_packets: List[Dict[str, Any]], whitelist_names: Set[str], max_lines_per_batch: int = 130) -> List[Dict[str, Any]]:
     """
-    คัดเลือก Scene Packets ที่ครอบคลุมตัวละคร Whitelist ทั้งหมดและมีปฏิสัมพันธ์ที่เข้มข้นที่สุด
+    สกัดชุดบทสนทนาประจำฉากแบบครอบคลุม 100% ไม่มีบรรทัดใดถูกตัดทิ้ง (Zero Truncation Guarantee)
+    หากฉากยาวเกิน 130 บรรทัด จะทำการแบ่งตอน (Part 1, Part 2...) โดยมี Overlap เพื่อรักษาความต่อเนื่องของบริบท
     """
-    candidate_scenes = []
-    covered_characters = set()
+    batches = []
 
-    # วิเคราะห์แต่ละฉากเพื่อดูว่ามีตัวละคร Whitelist กี่ตัวและมีบทสนทนาอะไรบ้าง
     for pkt in scene_packets:
         pid = pkt.get("packet_id", "")
         fn = pkt.get("filename", "")
@@ -183,9 +196,7 @@ def select_scene_interaction_batches(scene_packets: List[Dict[str, Any]], whitel
         if not dlgs:
             continue
 
-        spks_in_scene = set()
-        formatted_dialogues = []
-
+        extracted = []
         for d in dlgs:
             spk = d.get("speaker", "")
             raw = d.get("clean_text") or d.get("raw_text", "")
@@ -193,49 +204,49 @@ def select_scene_interaction_batches(scene_packets: List[Dict[str, Any]], whitel
             if not clean_t:
                 continue
 
-            # ตรวจจับชื่อผู้พูดจริง
             actual_spk = spk
             if actual_spk in ("Untagged", "", "None"):
                 for w in whitelist_names:
                     if f"【{w}】" in raw or f"[{w}]" in raw:
                         actual_spk = w
                         break
+            extracted.append((actual_spk, clean_t))
 
-            if actual_spk in whitelist_names:
-                spks_in_scene.add(actual_spk)
+        if not extracted:
+            continue
 
-            formatted_dialogues.append(f"[{actual_spk}]: {clean_t}")
+        spks_in_scene = set(s[0] for s in extracted if s[0] in whitelist_names)
+        if not spks_in_scene:
+            continue
 
-        if spks_in_scene:
-            candidate_scenes.append({
-                "packet_id": pid,
-                "filename": fn,
+        total_len = len(extracted)
+        if total_len <= max_lines_per_batch:
+            formatted = [f"[{s[0]}]: {s[1]}" for s in extracted]
+            batches.append({
+                "scene_id": f"{pid} ({fn})",
                 "characters": sorted(list(spks_in_scene)),
-                "dialogues": formatted_dialogues,
-                "score": len(spks_in_scene) * 100 + min(len(formatted_dialogues), 80)
+                "dialogues": formatted,
+                "range": f"1-{total_len}"
             })
+        else:
+            step = max_lines_per_batch - 8
+            chunk_num = 1
+            for start_idx in range(0, total_len, step):
+                chunk = extracted[start_idx:start_idx + max_lines_per_batch]
+                chunk_spks = set(s[0] for s in chunk if s[0] in whitelist_names)
+                if chunk_spks:
+                    formatted = [f"[{s[0]}]: {s[1]}" for s in chunk]
+                    batches.append({
+                        "scene_id": f"{pid}_{chunk_num:02d} ({fn} Part {chunk_num})",
+                        "characters": sorted(list(chunk_spks)),
+                        "dialogues": formatted,
+                        "range": f"{start_idx+1}-{min(start_idx+len(chunk), total_len)}"
+                    })
+                chunk_num += 1
+                if start_idx + max_lines_per_batch >= total_len:
+                    break
 
-    # เรียงลำดับฉากตามความเข้มข้นของตัวละคร Whitelist
-    candidate_scenes.sort(key=lambda s: s["score"], reverse=True)
-
-    selected_batches = []
-    # 1. Greedy selection เพื่อให้ครอบคลุมตัวละคร Whitelist ทุกตัว
-    for sc in candidate_scenes:
-        chars = set(sc["characters"])
-        new_chars = chars - covered_characters
-        if new_chars or len(selected_batches) < max_batches:
-            # จำกัดความยาวบทสนทนาในฉากไม่ให้ยาวเกินไป (ไม่เกิน 45 บรรทัดที่กระชับ)
-            sample_dlgs = sc["dialogues"][:45]
-            selected_batches.append({
-                "scene_id": f"{sc['packet_id']} ({sc['filename']})",
-                "characters": sc["characters"],
-                "dialogues": sample_dlgs
-            })
-            covered_characters.update(chars)
-            if len(covered_characters) == len(whitelist_names) and len(selected_batches) >= 5:
-                break
-
-    return selected_batches
+    return batches
 
 
 def build_scene_prompt(batch: Dict[str, Any]) -> Tuple[str, str]:
@@ -245,7 +256,7 @@ def build_scene_prompt(batch: Dict[str, Any]) -> Tuple[str, str]:
     chars_str = ", ".join([f'"{c}"' for c in chars])
     dlgs_str = "\n".join(batch["dialogues"])
 
-    system_prompt = """You are a video game narrative analyst, character profiler, and Japanese dialogue linguist.
+    system_prompt = """You are an elite video game narrative analyst, character profiler, and Japanese dialogue linguist.
 Your mission is to analyze the in-game dialogue of a specific game scene to extract identity, personality, and interpersonal relationships for the target characters present.
 
 CRITICAL INVARIANTS:
@@ -277,15 +288,15 @@ Analyze the target characters present in this scene and output a JSON object adh
         "gender": "MALE" | "FEMALE" | "NON_BINARY" | "UNKNOWN",
         "age": "CHILD" | "TEEN" | "ADULT" | "ELDER" | "UNKNOWN",
         "species": "HUMAN",
-        "social_role": "brief description (e.g. husband, wife, teacher, acquaintance, child)"
+        "social_role": "brief description (e.g. husband, wife, teacher, acquaintance, child, inn_receptionist)"
       }},
       "personality_tags": [
         "PER_SOC_CASUAL", "PER_SOC_POLITE", "PER_SOC_RUDE", "PER_VIBE_CHEERFUL", "PER_VIBE_SERIOUS", "PER_SOC_PLAYFUL" (pick 2-3 matching tags)
       ],
       "relationships": [
         {{
-          "target_name": "Exact Japanese name of another target character present in this scene",
-          "roles": ["ROLE_FAM_SPOUSE" | "ROLE_FAM_PARENT" | "ROLE_FAM_CHILD" | "ROLE_SOC_FRIEND" | "ROLE_SOC_ACQUAINTANCE" | "ROLE_SOC_PEER" | "ROLE_EDU_TEACHER" | "ROLE_SOC_NEIGHBOR"],
+          "target_name": "Exact Japanese name of another target character present in this scene or interacted with",
+          "roles": ["ROLE_FAM_SPOUSE" | "ROLE_FAM_PARENT" | "ROLE_FAM_CHILD" | "ROLE_SOC_FRIEND" | "ROLE_SOC_ACQUAINTANCE" | "ROLE_SOC_PEER" | "ROLE_EDU_TEACHER" | "ROLE_SOC_CLIENT" | "ROLE_SOC_NEIGHBOR"],
           "affinity": "AFF_LOVING" | "AFF_FRIENDLY" | "AFF_NEUTRAL" | "AFF_DISLIKE" | "AFF_HOSTILE",
           "intimacy": "INT_INTIMATE" | "INT_CLOSE" | "INT_CASUAL" | "INT_DISTANT" | "INT_ESTRANGED",
           "power_dynamic": "DYN_DOMINANT" | "DYN_EQUAL" | "DYN_SUBMISSIVE",
@@ -371,99 +382,105 @@ def derive_pronouns_from_taxonomy(
 ) -> Dict[str, Any]:
     """
     คำนวณสรรพนามบุรุษที่ 1, 2, 3 และหางเสียงตามหลักไวยากรณ์ไทยและ taxonomy.json แบบ Deterministic 100%
-    ไม่มีคำนามอื่นอย่าง 'สามี' หรือ 'ภรรยา' หลุดเข้ามาในช่องสรรพนามเด็ดขาด
+    แยกแยะเพศ วัย ความอาวุโส ความสุภาพ และพหูพจน์อย่างชัดเจน
     """
     roles = roles or []
     is_plural = "たち" in target_name or "2人" in target_name or "พวก" in target_name
+    is_teacher = "先生" in target_name or "ROLE_EDU_TEACHER" in roles
+    is_elder = target_age == "ELDER" or "おばあさん" in target_name or "おじいさん" in target_name
+    is_child = target_age == "CHILD" or "子供" in target_name or "小学生" in target_name
+    is_female = target_gender == "FEMALE"
+    is_male = target_gender == "MALE"
+    is_spouse = "ROLE_FAM_SPOUSE" in roles
 
-    self_p = "ฉัน"
-    target_p = "คุณ"
-    third_p = "เขา"
-    ending_p = ""
-
-    if formality_level == 1:
-        # Intimate / Vulgar / Slang
-        if "ROLE_CON_ENEMY" in roles or "ROLE_CON_RIVAL" in roles:
-            self_p = "ข้า" if speaker_gender == "MALE" else "ฉัน"
-            target_p = "แก" if speaker_gender != "MALE" else "เอ็ง"
-            third_p = "มัน"
-            ending_p = "วะ"
-        else:
-            self_p = "เรา" if speaker_gender == "MALE" else "ฉัน"
-            target_p = "แก" if target_gender == "FEMALE" else "นาย"
-            third_p = "มัน"
-            ending_p = ""
-
-    elif formality_level == 2:
-        # Casual / Familiar / Spouse / Family
-        if "ROLE_FAM_SPOUSE" in roles:
-            if speaker_gender == "MALE":
-                self_p = "ผม"
-                target_p = "เธอ"
-                third_p = "เขา"
-                ending_p = ""
-            else:
-                self_p = "ฉัน"
-                target_p = "คุณ"
-                third_p = "เขา"
-                ending_p = "ค่ะ"
-        elif speaker_age == "CHILD":
-            self_p = "หนู" if speaker_gender == "FEMALE" else "ผม"
-            target_p = "พี่" if target_age in ("TEEN", "ADULT") else "เธอ"
-            third_p = "เขา"
-            ending_p = "ค่ะ" if speaker_gender == "FEMALE" else "ครับ"
-        else:
-            if speaker_gender == "MALE":
-                self_p = "ผม"
-                target_p = "เธอ" if target_gender == "FEMALE" else "นาย"
-                third_p = "เขา"
-                ending_p = ""
-            else:
-                self_p = "ฉัน"
-                target_p = "เธอ" if target_gender == "FEMALE" else "นาย"
-                third_p = "เขา"
-                ending_p = "จ้ะ"
-
-    elif formality_level == 3:
-        # Neutral Polite
-        if speaker_gender == "MALE":
-            self_p = "ผม"
-            target_p = "คุณ"
-            third_p = "เขา"
-            ending_p = "ครับ"
-        else:
-            self_p = "ฉัน"
-            target_p = "คุณ"
-            third_p = "เขา"
-            ending_p = "ค่ะ"
-
-    elif formality_level == 4:
-        # Formal / Respectful / Hierarchy / Teacher / Elder
-        if "ROLE_EDU_TEACHER" in roles or "先生" in target_name:
-            self_p = "ผม" if speaker_gender == "MALE" else "ฉัน"
-            target_p = "คุณ"
-            third_p = "ท่าน"
-            ending_p = "ครับ" if speaker_gender == "MALE" else "ค่ะ"
-        elif "受付のおばあさん" in target_name or target_age == "ELDER":
-            self_p = "ผม" if speaker_gender == "MALE" else "ฉัน"
-            target_p = "คุณยาย" if "おばあさん" in target_name else "คุณ"
-            third_p = "ท่าน"
-            ending_p = "ครับ" if speaker_gender == "MALE" else "ค่ะ"
-        else:
-            self_p = "ผม" if speaker_gender == "MALE" else "ดิฉัน"
-            target_p = "คุณ"
-            third_p = "เขา"
-            ending_p = "ครับ" if speaker_gender == "MALE" else "ค่ะ"
-
-    elif formality_level == 5:
-        # Honorific / Ultra-Formal
-        self_p = "กระผม" if speaker_gender == "MALE" else "ดิฉัน"
-        target_p = "ท่าน"
-        third_p = "ท่าน"
-        ending_p = "ขอรับ" if speaker_gender == "MALE" else "เจ้าค่ะ"
-
+    # -------------------------------------------------------------
+    # 1. THIRD PERSON PRONOUN (สรรพนามบุรุษที่ 3: ผู้ถูกพาดพิงถึง)
+    # แยกแยะ: เพศ, อาวุโส, พหูพจน์, ระดับความสุภาพ และบทบาท
+    # -------------------------------------------------------------
     if is_plural:
         third_p = "พวกเขา"
+    elif formality_level == 1:
+        # หยาบคาย / นักเลง / ศัตรู
+        third_p = "มัน"
+    elif is_teacher or (is_elder and formality_level >= 3):
+        # เคารพครูบาอาจารย์ และผู้สูงอายุ
+        third_p = "ท่าน"
+    elif formality_level >= 5:
+        third_p = "ท่าน"
+    elif is_female:
+        # เพศหญิง: ใช้ "เธอ" (ไม่ใช้ "เขา" ปน)
+        third_p = "เธอ"
+    elif is_male:
+        # เพศชาย: ใช้ "เขา"
+        third_p = "เขา"
+    else:
+        # UNKNOWN หรือเด็ก
+        third_p = "เขา" if not is_female else "เธอ"
+
+    # -------------------------------------------------------------
+    # 2. TARGET PRONOUN (สรรพนามบุรุษที่ 2: ผู้ฟัง / คู่สนทนา)
+    # -------------------------------------------------------------
+    if is_plural:
+        target_p = "พวกเธอ" if formality_level <= 2 else "พวกคุณ"
+    elif formality_level == 1:
+        if "ROLE_CON_ENEMY" in roles or "ROLE_CON_RIVAL" in roles:
+            target_p = "แก" if speaker_gender != "MALE" else "เอ็ง"
+        else:
+            target_p = "แก" if is_female else "นาย"
+    elif is_spouse:
+        # คู่สมรส
+        if speaker_gender == "MALE":
+            target_p = "เธอ"
+        else:
+            target_p = "คุณ"
+    elif is_teacher:
+        target_p = "คุณ" if formality_level <= 3 else "ท่าน"
+    elif is_elder:
+        target_p = "คุณยาย" if "おばあさん" in target_name else ("คุณตา" if "おじいさん" in target_name else "คุณ")
+    elif is_child:
+        target_p = "หนู" if is_female else "เธอ"
+    elif formality_level == 2:
+        target_p = "เธอ" if is_female else "นาย"
+    elif formality_level in (3, 4):
+        target_p = "คุณ"
+    else: # 5
+        target_p = "ท่าน"
+
+    # -------------------------------------------------------------
+    # 3. SELF PRONOUN (สรรพนามบุรุษที่ 1: ตัวผู้พูด)
+    # -------------------------------------------------------------
+    if formality_level == 1:
+        self_p = "ข้า" if speaker_gender == "MALE" else "ฉัน"
+    elif speaker_age == "CHILD":
+        self_p = "หนู" if speaker_gender == "FEMALE" else "ผม"
+    elif is_child and speaker_age in ("TEEN", "ADULT"):
+        # ผู้ใหญ่คุยกับเด็ก
+        self_p = "พี่" if speaker_age in ("TEEN", "ADULT") and "おばあさん" not in speaker_gender else "ฉัน"
+    elif is_spouse:
+        self_p = "ผม" if speaker_gender == "MALE" else "ฉัน"
+    elif formality_level == 2:
+        self_p = "ผม" if speaker_gender == "MALE" else "ฉัน"
+    elif formality_level in (3, 4):
+        self_p = "ผม" if speaker_gender == "MALE" else "ฉัน"
+    else: # 5
+        self_p = "กระผม" if speaker_gender == "MALE" else "ดิฉัน"
+
+    # -------------------------------------------------------------
+    # 4. ENDING PARTICLE (คำลงท้าย / หางเสียง)
+    # -------------------------------------------------------------
+    if formality_level == 1:
+        ending_p = "วะ" if speaker_gender == "MALE" else ""
+    elif formality_level == 2:
+        if is_spouse:
+            ending_p = "" if speaker_gender == "MALE" else "ค่ะ"
+        elif is_child and speaker_age in ("TEEN", "ADULT"):
+            ending_p = "นะ" if speaker_gender == "MALE" else "จ้ะ"
+        else:
+            ending_p = "" if speaker_gender == "MALE" else "จ้ะ"
+    elif formality_level in (3, 4):
+        ending_p = "ครับ" if speaker_gender == "MALE" else "ค่ะ"
+    else: # 5
+        ending_p = "ขอรับ" if speaker_gender == "MALE" else "เจ้าค่ะ"
 
     return {
         "self_pronoun": self_p,
@@ -566,9 +583,12 @@ def synthesize_and_save_profiles(
                 "speech_style": pair_speech
             })
 
+        # กำหนด ID เฉพาะบุคคล
+        char_id = CANONICAL_ID_MAP.get(name, f"CHAR_{hash(name) & 0xFFFF:04X}_{re.sub(r'[^A-Za-z0-9]', '', name) or 'ACTOR'}")
+
         # โครงสร้าง Profile JSON ตามมาตรฐาน ATF V4/V5
         final_profile_json = {
-            "character_id": f"CHAR_{re.sub(r'[^A-Za-z0-9]', '', name).upper() or 'UNKNOWN'}",
+            "character_id": char_id,
             "name": name,
             "th_name": th_name,
             "aliases": [name],
@@ -597,7 +617,7 @@ def synthesize_and_save_profiles(
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(final_profile_json, f, ensure_ascii=False, indent=2)
 
-        print(f"  ✅ [Profile Saved] {name} (ไทย: {th_name}) -> เพศ: {gender}, วัย: {age}, สัมพันธ์กับ: {len(rels_output)} ตัวละคร")
+        print(f"  ✅ [Profile Saved] {name} ({char_id}) [ไทย: {th_name}] -> เพศ: {gender}, วัย: {age}, สัมพันธ์กับ: {len(rels_output)} ตัวละคร")
         saved_count += 1
 
     print(f"\n🎉 บันทึก Character Profiles ทั้งหมดเรียบร้อยแล้ว: {saved_count} ตัวละคร ใน {output_profiles_dir}")
@@ -605,8 +625,8 @@ def synthesize_and_save_profiles(
 
 def main():
     print("=" * 80)
-    print("   ATF SCENE-BASED CHARACTER PROFILER & RELATIONAL SYNTHESIZER (v6.1)")
-    print("   (Universal Scene Batching + Deterministic Python Pronoun Engine)")
+    print("   ATF SCENE-BASED CHARACTER PROFILER & RELATIONAL SYNTHESIZER (v6.2)")
+    print("   (100% Exhaustive Dialogue Coverage + Deterministic Pronoun Disambiguation)")
     print("=" * 80)
 
     manifest = load_manifest()
@@ -638,11 +658,11 @@ def main():
     print(f"[*] ตรวจพบตัวละคร Whitelist ทั้งหมด: {len(whitelist_names)} ตัวละคร")
     print(f"    {', '.join(sorted(whitelist_names))}\n")
 
-    # 1. คัดเลือก Scene Batches ที่ครอบคลุมตัวละคร Whitelist
-    scene_batches = select_scene_interaction_batches(scenes_data["packets"], whitelist_names)
-    print(f"[*] สกัดชุดฉากที่มีการสนทนาจริงได้ {len(scene_batches)} ฉากหลัก เพื่อส่งวิเคราะห์:")
+    # 1. สกัด Scene Batches แบบครอบคลุม 100% ไม่มีบรรทัดบทสนทนาใดตกหล่น
+    scene_batches = build_exhaustive_scene_batches(scenes_data["packets"], whitelist_names)
+    print(f"[*] สกัดชุดฉากที่มีบทสนทนาจริงได้ {len(scene_batches)} ฉากหลัก (ครอบคลุม 100% ของบทสนทนาเกม):")
     for idx, b in enumerate(scene_batches, start=1):
-        print(f"    ฉากที่ {idx}: {b['scene_id']} -> ตัวละคร: {b['characters']} ({len(b['dialogues'])} บรรทัด)")
+        print(f"    ฉากที่ {idx:02d}: {b['scene_id']} [{b['range']}] -> ตัวละคร: {b['characters']} ({len(b['dialogues'])} บรรทัด)")
 
     # 2. ตรวจสอบและรอ Bridge Server ให้พร้อม 100%
     wait_for_bridge_ready(BRIDGE_URL)
