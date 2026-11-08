@@ -1014,3 +1014,25 @@
 - **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
   - `src/atf/tools/analyze_character_profiles.py` (100% Standalone Python Evidence-Based Profiler)
   - `E:\GameTranslator\5 Days of Separation After Story+ (output)\tlas\` (ครบทุกไฟล์: scene_packets, glossary, whitelist, profiles 10 ตัว, global_pronoun_matrix 78 คู่, sfx/dic, enriched CSV 10 มิติ, taxonomy)
+
+### [2026-11-08 18:30] Session 31: Untranslated Pre-filled Row Detection & Port 8765 Normalization
+- **1. สิ่งที่ทำ (Actions Executed):**
+  - **แก้ไขตรรกะตรวจจับแถวที่ต้องแปลใน `chatgpt_translator_runner.py`:**
+    - แก้ไขปัญหาใหญ่ที่สคริปต์ไม่ยอมส่ง Batch ไปยัง ChatGPT: โค้ดเดิมตรวจแค่ `if init_text.strip(): continue` ทำให้เมื่อเปิดโปรเจกต์ใหม่ที่ export มาจาก Translator++ ซึ่งคอลัมน์ `Initial` ถูกเติมข้อความภาษาญี่ปุ่นตั้งต้นมาเท่ากับ `Original` สคริปต์จึงเข้าใจผิดคิดว่าแปลเสร็จแล้วทั้งหมด (1,564 แถว)
+    - เพิ่มเงื่อนไข `is_untranslated`: แถวจะถูกส่งให้ LLM แปลเมื่อ `init_text` ว่างเปล่า, หรือ `init_text == orig_text`, หรือ `init_text` ยังคงมีอักษรภาษาญี่ปุ่น (Hiragana, Katakana, CJK) โดยไม่มีภาษาไทย
+    - แก้ไขทั้งใน `translate_empty_rows` (บทสนทนาหลัก) และ `translate_plugins_csv` (ข้อความปลั๊กอิน UI)
+  - **แก้ข้อความแสดงผลพอร์ต Bridge ใน `atf.py`:**
+    - เปลี่ยนข้อความแจ้งเตือนจากพอร์ต 5000 เป็นพอร์ต 8765 ให้ตรงกับความเป็นจริงของ `chatgpt_bridge_server.py` และ Userscript
+  - **Commit & Push ขึ้น Git:** Commit `d866f24` ขึ้น GitHub `origin/main`
+- **2. แนวคิดเชิงสถาปัตยกรรม (Architectural Rationale):**
+  - **Translator++ Pre-fill Awareness:** ในขั้นตอน Workflow ของการแปลเกม Translator++ จะใส่ Initial เป็นภาษาญี่ปุ่นมาเสมอ ระบบสากล (Universal Framework) ต้องไม่สันนิษฐานว่า Initial ที่ไม่ว่างคือข้อความที่แปลเสร็จแล้ว แต่ต้องตรวจสอบเชิงภาษา (Linguistic Verification: ตรวจอักษร CJK เทียบกับ Thai)
+- **3. ความคืบหน้า (Progress & Milestones):**
+  - บรรลุ Phase 28 ใน `single_source_checkpoint.md` อย่างสมบูรณ์แบบ
+- **4. ผลการทดสอบ (Verification & Test Results):**
+  - ทดสอบสแกน `5 Days of Separation After Story+_enriched.csv`: ตรวจพบแถวที่ต้องแปลจริงครบ 1,331 แถว (Displayable == Yes)
+  - ทดสอบ `python atf.py translate --dry-run`: โหลดและประมวลผล 15 แถวตัวอย่างด้วยกฎเฉพาะคู่และ 5D LQA ผ่านฉลุย 100/100 คะแนน
+- **5. สิ่งที่ต้องแก้ไข / อุปสรรค (Remaining Blockers / Next Fixes):**
+  - ผู้ใช้สามารถเปิด `python atf.py bridge` (หน้าต่าง 1) และรัน `python atf.py translate` (หน้าต่าง 2) เพื่อส่งบทสนทนา 1,331 แถวเข้าสู่ ChatGPT ได้ทันที
+- **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
+  - `src/atf/tools/chatgpt_translator_runner.py` (Untranslated Row Engine Fixed)
+  - `atf.py` (Port 8765 Alignment)
