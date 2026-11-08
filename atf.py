@@ -83,6 +83,7 @@ def main():
 
     # 3b. prepare-glossary
     subparsers.add_parser("prepare-glossary", help="[3b] สกัดชื่อตัวละคร ไอเทม สถานที่ สกิลจากฐานข้อมูลเกมจริง")
+    subparsers.add_parser("translate-glossary", help="[AI] แปลชื่อตัวละคร สถานที่ และ UI ใน Glossary ผ่าน ChatGPT Web Bridge")
 
     # 3c. prepare-whitelist
     subparsers.add_parser("prepare-whitelist", help="[3c] คัดกรองตัวละครสำคัญเข้าสู่ character_whitelist.json (ADR-035)")
@@ -158,6 +159,10 @@ def main():
     elif cmd in ["prepare-glossary", "glossary"]:
         print("\n📖 [ATF Stage 3b] กำลังสกัด Entity Master Glossary จากตัวเกมจริง...")
         sys.exit(run_script("build_master_glossary.py", unknown))
+
+    elif cmd in ["translate-glossary", "glossary-ai"]:
+        print("\n🌐 [ATF Glossary AI] กำลังส่งคำศัพท์และชื่อเฉพาะไปแปลผ่าน ChatGPT Web Bridge...")
+        sys.exit(run_script("translate_master_glossary.py", unknown))
 
     elif cmd in ["prepare-whitelist", "scan"]:
         print("\n👥 [ATF Stage 3c] กำลังวิเคราะห์และคัดกรอง Character Whitelist (ADR-035)...")

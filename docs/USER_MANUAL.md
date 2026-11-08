@@ -143,6 +143,11 @@ flowchart TD
 - **คำสั่ง:** `python atf.py prepare-glossary`
 - **ผลลัพธ์:** `<output_dir>/tlas/tlas_glossary.json`
 
+#### [3b.2 - AI] แปลคำศัพท์และชื่อเฉพาะใน Master Glossary ด้วย ChatGPT (`translate-glossary`)
+ส่งชื่อตัวละคร สถานที่ และคำสั่งระบบใน `tlas_glossary.json` ไปให้ ChatGPT ช่วยแปลและทับศัพท์เป็นภาษาไทยระดับวรรณกรรม พร้อมบันทึกล็อกคำแปลไทย 1:1 กลับลงใน Glossary ทันที (ผู้ใช้สามารถเปิดตรวจแก้ชื่อที่ต้องการล็อกได้ก่อนเริ่มวิเคราะห์ตัวละคร):
+- **คำสั่ง:** `python atf.py translate-glossary`
+- **ผลลัพธ์:** อัปเดตฟิลด์ `"th"` ใน `<output_dir>/tlas/tlas_glossary.json` ครบถ้วน 100%
+
 #### [3c] คัดกรอง Character Whitelist (`prepare-whitelist`)
 วิเคราะห์ความถี่และบทบาทของตัวละคร เพื่อคัดแยกว่า "ใครควรถูกนำไปสร้าง Character Profile" (Core/Secondary) และใครเป็น "Ambient NPC" (Clean Passthrough ตาม ADR-035):
 - **คำสั่ง:** `python atf.py prepare-whitelist`

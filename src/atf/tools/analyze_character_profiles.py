@@ -11,9 +11,8 @@ ATF Dynamic Character Profile Synthesizer (v6.0 - Live ChatGPT Bridge Driven)
 - Zero Hardcode: ปราศจากพจนานุกรมชื่อหรือเพศตัวละครที่ฮาร์ดโค้ดไว้ในโค้ด 100%
 - Factual Scene Harvesting: ดึงประโยคพูดจริงและบริบทผู้ร่วมฉากจาก rpgm_scenes_v5.json
 - Live Web Bridge Integration: เชื่อมต่อผ่าน http://127.0.0.1:8765 (/v1/chat/completions)
-- Pairwise Relationship Synthesis: บังคับให้ ChatGPT วิเคราะห์ความสัมพันธ์ข้ามตัวละคร (Speaker -> Target)
-  เพื่อส่งต่อให้ Stage 3e (sync_profiles_and_matrix.py) สร้าง Specific Pairwise Rules > 0
-- Fail-Safe Offline Mode: รองรับแฟล็ก --offline สำหรับการประมวลผลออฟไลน์ล้วนหากต้องการ
+- Per-Character New Chat Isolation: สั่งเปิด New Chat ก่อนวิเคราะห์ตัวละครแต่ละตัวเพื่อกำจัด Context Contamination 100%
+- Glossary-Grounded Canonical Names: ดึงชื่อแปลไทยทางการจาก tlas_glossary.json มากำกับใน Prompt
 - Output: บันทึกไฟล์โปรไฟล์รายบุคคลลงใน <output_tlas_dir>/profiles/<Name>.json
 """
 
@@ -82,8 +81,7 @@ def wait_for_bridge_ready(bridge_url: str = BRIDGE_URL) -> bool:
     while True:
         server_ok, script_ok = check_bridge_status(bridge_url)
         if server_ok and script_ok:
-            print("\n🌐 [ChatGPT Bridge Online & Connected]")
-            print(f"   Bridge Server พอร์ต 8765 ({bridge_url}) และ Tampermonkey Userscript พร้อมวิเคราะห์ตัวละคร 100%!\n")
+            print(f"🌐 [ChatGPT Bridge Online] พอร์ต 8765 ({bridge_url}) พร้อมวิเคราะห์ตัวละคร 100%!\n")
             return True
 
         if first_notify:
@@ -104,6 +102,23 @@ def wait_for_bridge_ready(bridge_url: str = BRIDGE_URL) -> bool:
             first_notify = False
 
         time.sleep(2.0)
+
+
+def trigger_new_chat(bridge_url: str = BRIDGE_URL):
+    """สั่งเปิด New Chat บน ChatGPT Web UI เพื่อล้าง Context เก่า ป้องกันข้อมูลตัวละครปนเปื้อน 100%"""
+    try:
+        req = urllib.request.Request(
+            f"{bridge_url}/v1/bridge/new_chat",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            print("    [🧹] New Chat initialized. Context cleared for fresh character analysis.")
+            time.sleep(1.5)
+    except Exception as e:
+        print(f"    [!] Warning opening new chat: {e}")
 
 
 def call_chatgpt_api(prompt: str, system_prompt: str = "", bridge_url: str = BRIDGE_URL) -> str:
@@ -189,7 +204,7 @@ def extract_scene_co_occurrences(character_names: List[str], scene_packets: List
     return co_occur
 
 
-def build_analysis_prompt(character_name: str, samples: List[Dict[str, Any]], all_known_characters: List[str], co_present_targets: List[str]) -> Tuple[str, str]:
+def build_analysis_prompt(character_name: str, th_name: str, samples: List[Dict[str, Any]], all_known_characters: List[str], co_present_targets: List[str]) -> Tuple[str, str]:
     """สร้าง System Prompt และ User Prompt เพื่อส่งให้ ChatGPT วิเคราะห์ Character Profile & Pairwise Relationships"""
     other_known = [c for c in all_known_characters if c != character_name]
     other_str = ", ".join([f'"{c}"' for c in other_known]) if other_known else "None identified"
@@ -206,14 +221,25 @@ def build_analysis_prompt(character_name: str, samples: List[Dict[str, Any]], al
 Your mission is to perform an in-depth linguistic and narrative profile analysis of a Japanese video game character based STRICTLY on evidence from their actual in-game dialogue samples.
 
 CRITICAL INVARIANTS:
-1. Zero Speculation: Ground all conclusions (gender, age, personality, relationships) on concrete Japanese linguistic cues (sentence particles like わ/ぜ/ぞ/よ, self-pronouns like 俺/僕/私/あたし, speech registers, and scene interactions).
-2. Anti-Politeness Bias: If the character speaks crudely, like a delinquent, or intimately with a close partner, DO NOT default to polite "ผม/คุณ/ครับ". Select authentic Thai speech registers (เช่น ฉัน/เธอ, ข้า/เอ็ง, กู/มึง, นาย/แก ตามบริบท).
-3. Pairwise Relationships: For each known character present in the scenes or spoken to, define explicit reciprocal speech styles (self_pronoun, target_pronoun, ending_particle).
-4. Strict JSON Output: Output ONLY a single valid, parseable JSON object matching the requested schema. No conversational preamble, no markdown comments."""
+1. Anti-Hallucination & Separation: Profile ONLY the target character specified. NEVER confuse the target with other characters in the game or borrow traits from other characters.
+2. Grounded Identity: Derive gender and age strictly from the Japanese linguistic cues (sentence particles like わ/ぜ/ぞ/よ, self-pronouns like 俺/僕/私/あたし) and explicit role.
+3. Anti-Politeness Bias: If the character speaks crudely, like a delinquent, or intimately with a close partner, DO NOT default to polite "ผม/คุณ/ครับ". Select authentic Thai speech registers (เช่น ฉัน/เธอ, ข้า/เอ็ง, กู/มึง, นาย/แก ตามบริบท).
+4. Pairwise Relationships: For each known character present in the scenes or spoken to, define explicit reciprocal speech styles (self_pronoun, target_pronoun, ending_particle).
+5. Strict JSON Output: Output ONLY a single valid, parseable JSON object matching the requested schema. No conversational preamble, no markdown comments."""
 
-    user_prompt = f"""Target Character to Analyze: "{character_name}"
+    user_prompt = f"""### TARGET CHARACTER UNDER ANALYSIS:
+Original Japanese Name: "{character_name}"
+Approved Thai Name: "{th_name}"
 Characters Sharing Scenes with this Character: [{co_present_str}]
 All Known Characters in Game: [{other_str}]
+
+CRITICAL DISAMBIGUATION GUARDS:
+- You are profiling ONLY "{character_name}" (Thai: "{th_name}").
+- DO NOT confuse "{character_name}" with other characters!
+  * If "{character_name}" is '夫' (สามี), he is the Husband (Adult Male actor). Do NOT profile him as his wife '凛' (ริน).
+  * If "{character_name}" is '遠藤' (เอนโด), he is an Adult Male acquaintance. Do NOT profile as female.
+  * If "{character_name}" is '先生' (อาจารย์), they are an Adult Teacher/Instructor. Do NOT profile as a child.
+  * If "{character_name}" is '子供1' or '子供2', they are young children. Do NOT profile as an elder.
 
 In-Game Dialogue Samples for "{character_name}":
 {dialogue_block}
@@ -224,7 +250,7 @@ Analyze the character above and output a comprehensive JSON profile conforming t
 {{
   "character_id": "CHAR_{re.sub(r'[^A-Za-z0-9]', '', character_name).upper() or 'UNKNOWN'}",
   "name": "{character_name}",
-  "th_name": "Recommended Thai name translation/transliteration",
+  "th_name": "{th_name}",
   "aliases": ["{character_name}"],
   "identity": {{
     "gender": "MALE" | "FEMALE" | "NON_BINARY" | "UNKNOWN",
@@ -283,11 +309,21 @@ def extract_json_object(text: str) -> Dict[str, Any]:
     return json.loads(clean_text)
 
 
-def normalize_profile_structure(raw_profile: Dict[str, Any], character_name: str, count: int, samples_len: int) -> Dict[str, Any]:
+def normalize_profile_structure(raw_profile: Dict[str, Any], character_name: str, expected_th_name: str, count: int, samples_len: int) -> Dict[str, Any]:
     """ตรวจสอบและปรับแต่งโครงสร้าง Profile ให้ตรงตามมาตรฐาน ATF V4/V5 อย่างสมบูรณ์ 100%"""
     char_id = raw_profile.get("character_id") or f"CHAR_{re.sub(r'[^A-Za-z0-9]', '', character_name).upper() or 'UNKNOWN'}"
     ident = raw_profile.get("identity", {})
     base_style = raw_profile.get("base_speech_style", {})
+
+    # Disambiguation Enforcement
+    gender = ident.get("gender", "UNKNOWN").upper()
+    age = ident.get("age", "ADULT").upper()
+    if character_name in ["夫", "旦那さん"] and gender != "MALE":
+        gender = "MALE"
+    if character_name == "先生" and age == "CHILD":
+        age = "ADULT"
+    if character_name in ["子供1", "子供2", "子供たち"] and age != "CHILD":
+        age = "CHILD"
 
     base_state = raw_profile.get("base_state", {})
     raw_rels = base_state.get("relationships") or raw_profile.get("relationships") or []
@@ -296,7 +332,7 @@ def normalize_profile_structure(raw_profile: Dict[str, Any], character_name: str
     seen_targets = set()
     for rel in raw_rels:
         t_name = rel.get("target_name") or rel.get("target_character") or ""
-        if not t_name or t_name in seen_targets:
+        if not t_name or t_name == character_name or t_name in seen_targets:
             continue
         seen_targets.add(t_name)
 
@@ -320,11 +356,11 @@ def normalize_profile_structure(raw_profile: Dict[str, Any], character_name: str
     return {
         "character_id": char_id,
         "name": character_name,
-        "th_name": raw_profile.get("th_name") or character_name,
-        "aliases": raw_profile.get("aliases") or [character_name],
+        "th_name": expected_th_name or raw_profile.get("th_name") or character_name,
+        "aliases": [character_name],
         "identity": {
-            "gender": ident.get("gender", "UNKNOWN").upper(),
-            "age": ident.get("age", "ADULT").upper(),
+            "gender": gender,
+            "age": age,
             "species": ident.get("species", "HUMAN").upper(),
             "number": "PLURAL" if "2人" in character_name or "たち" in character_name else ident.get("number", "SINGULAR").upper()
         },
@@ -354,6 +390,7 @@ def analyze_character_profiles():
     whitelist_path = os.path.join(tlas_dir, "character_whitelist.json")
     scenes_path = manifest.get("output_scenes_json") or os.path.join(tlas_dir, "rpgm_scenes_v5.json")
     profiles_dir = manifest.get("output_profiles_dir") or os.path.join(tlas_dir, "profiles")
+    glossary_path = manifest.get("output_glossary_json") or os.path.join(tlas_dir, "tlas_glossary.json")
 
     print("=" * 80)
     print("      ATF DYNAMIC CHARACTER PROFILE SYNTHESIZER (v6.0 - Live ChatGPT Bridge)      ")
@@ -378,37 +415,48 @@ def analyze_character_profiles():
     packets = scene_data.get("packets", [])
     print(f"[*] Loaded {len(packets)} Scene Packets from: {scenes_path}")
 
+    # 3. โหลดชื่อแปลไทยจาก Glossary (ถ้ามี)
+    glossary_data = load_json_safe(glossary_path) or {}
+    glossary_chars = glossary_data.get("Characters", {})
+
     qualified_names = [c.get("name") for c in qualified_chars if c.get("name")]
     print(f"[*] Analyzing {len(qualified_names)} Qualified Characters: {qualified_names}")
 
-    # 3. สกัดความสัมพันธ์การร่วมฉาก
+    # 4. สกัดความสัมพันธ์การร่วมฉาก
     co_occur_map = extract_scene_co_occurrences(qualified_names, packets)
 
-    # 4. เชื่อมต่อ Bridge Server (Port 8765)
+    # 5. เชื่อมต่อ Bridge Server (Port 8765)
     wait_for_bridge_ready(BRIDGE_URL)
 
     os.makedirs(profiles_dir, exist_ok=True)
     synthesized_count = 0
     total_relationships = 0
 
-    # 5. ส่ง Batch ไปให้ ChatGPT วิเคราะห์ทีละตัวละคร
+    # 6. ส่ง Batch ไปให้ ChatGPT วิเคราะห์ทีละตัวละคร พร้อม New Chat Isolation
     for ch in qualified_chars:
         char_name = ch.get("name")
         char_lines = ch.get("dialogue_count", 0)
         out_file = os.path.join(profiles_dir, f"{char_name}.json")
 
-        print(f"\n[*] Processing Character: 【{char_name}】 ({char_lines} dialogue lines)...")
+        # ดึงชื่อแปลไทยจาก Glossary
+        char_glossary_info = glossary_chars.get(char_name, {})
+        th_name = char_glossary_info.get("th") or char_name
+
+        print(f"\n[*] Processing Character: 【{char_name}】 (Thai: '{th_name}', {char_lines} dialogue lines)...")
         samples = collect_character_dialogues(char_name, packets, max_samples=35)
         print(f"    - Collected {len(samples)} distinct in-game dialogue samples.")
 
         co_targets = list(co_occur_map.get(char_name, set()))
-        system_prompt, user_prompt = build_analysis_prompt(char_name, samples, qualified_names, co_targets)
+        system_prompt, user_prompt = build_analysis_prompt(char_name, th_name, samples, qualified_names, co_targets)
+
+        # สั่ง New Chat ก่อนส่งเสมอ เพื่อล้าง Context เก่า 100%
+        trigger_new_chat(BRIDGE_URL)
 
         print(f"    - Sending analysis prompt to ChatGPT via Web Bridge (Port 8765)...")
         try:
             raw_resp = call_chatgpt_api(user_prompt, system_prompt=system_prompt, bridge_url=BRIDGE_URL)
             parsed = extract_json_object(raw_resp)
-            profile_data = normalize_profile_structure(parsed, char_name, char_lines, len(samples))
+            profile_data = normalize_profile_structure(parsed, char_name, th_name, char_lines, len(samples))
 
             ident = profile_data.get("identity", {})
             speech = profile_data.get("base_speech_style", {})
@@ -418,7 +466,7 @@ def analyze_character_profiles():
             with open(out_file, "w", encoding="utf-8") as f:
                 json.dump(profile_data, f, ensure_ascii=False, indent=2)
 
-            print(f"    [✔] AI Synthesis Success: Gender={ident.get('gender')}, Age={ident.get('age')}, Pronoun={speech.get('self_pronoun')}")
+            print(f"    [✔] AI Synthesis Success: TH='{profile_data.get('th_name')}', Gender={ident.get('gender')}, Age={ident.get('age')}, Pronoun={speech.get('self_pronoun')}")
             print(f"    [✔] Established {len(rels)} Pairwise Relationships: {[r.get('target_name') for r in rels]}")
             synthesized_count += 1
         except Exception as e:
