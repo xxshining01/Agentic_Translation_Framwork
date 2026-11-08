@@ -400,11 +400,11 @@
         }
     }
 
-    // ฟังก์ชันสั่งขึ้นแชตใหม่ (New Chat) แบบปลอดภัยไม่รีโหลดหน้า พร้อมตรวจสอบ Readiness
+    // ฟังก์ชันสั่งขึ้นแชตใหม่ (New Chat) แบบปลอดภัย พร้อมกลไก Force Navigation หากปุ่มเดิมใช้งานไม่ได้
     async function triggerNewChat() {
         updateStatus("Opening New Chat...", "#f59e0b");
 
-        // ตรวจสอบปุ่ม "แชทใหม่" บนแถบแจ้งเตือนโควตา (Quota Banner) โดยตรงก่อน
+        // 1. ตรวจสอบปุ่ม "แชทใหม่" บนแถบแจ้งเตือนโควตา (Quota Banner) โดยตรงก่อน
         const bannerNewChatBtn = Array.from(document.querySelectorAll('button')).find(b => {
             const t = (b.innerText || "").trim();
             return t === "แชทใหม่" || t === "New chat" || t === "Start new chat";
@@ -412,30 +412,71 @@
         if (bannerNewChatBtn) {
             console.log("[ATF Bridge] Clicking 'แชทใหม่' button on quota banner directly...");
             try { bannerNewChatBtn.click(); } catch (e) { }
-            await new Promise(r => setTimeout(r, 1500));
+            await new Promise(r => setTimeout(r, 1200));
         }
 
-        const newChatBtn = document.querySelector('button[data-testid="new-chat-button"]') ||
-            document.querySelector('a[data-testid="new-chat-button"]') ||
-            document.querySelector('button[aria-label*="New chat" i]') ||
-            document.querySelector('button[aria-label*="แชทใหม่" i]') ||
-            document.querySelector('a[aria-label*="New chat" i]') ||
-            document.querySelector('nav a[href="/"]');
+        // 2. ค้นหาปุ่ม New Chat ใน UI จาก Selector ทุกรูปแบบ
+        const newChatSelectors = [
+            'button[data-testid="create-new-chat-button"]',
+            'button[data-testid="new-chat-button"]',
+            'a[data-testid="create-new-chat-button"]',
+            'a[data-testid="new-chat-button"]',
+            'button[aria-label*="New chat" i]',
+            'button[aria-label*="แชทใหม่" i]',
+            'a[aria-label*="New chat" i]',
+            'a[aria-label*="แชทใหม่" i]',
+            'nav a[href="/"]',
+            'header a[href="/"]',
+            'a[href="/"]'
+        ];
 
-        if (newChatBtn) {
-            newChatBtn.click();
-        } else {
-            const headerLogo = document.querySelector('header a') || document.querySelector('nav a[href="/"]');
-            if (headerLogo) headerLogo.click();
+        let clicked = false;
+        for (const sel of newChatSelectors) {
+            const el = document.querySelector(sel);
+            if (el) {
+                try {
+                    el.click();
+                    clicked = true;
+                    console.log("[ATF Bridge] Clicked New Chat button via:", sel);
+                    break;
+                } catch (e) { }
+            }
+        }
+
+        // 3. กระตุ้นด้วยคีย์ลัดของ ChatGPT (Ctrl + Shift + O)
+        if (!clicked) {
+            try {
+                document.dispatchEvent(new KeyboardEvent('keydown', {
+                    key: 'O',
+                    code: 'KeyO',
+                    keyCode: 79,
+                    which: 79,
+                    ctrlKey: true,
+                    shiftKey: true,
+                    bubbles: true,
+                    cancelable: true
+                }));
+            } catch (e) { }
+        }
+
+        await new Promise(r => setTimeout(r, 1000));
+
+        // 4. Ultimate Fallback: หาก URL ปัจจุบันยังคงค้างอยู่ที่ /c/... (ห้องแชตเดิม) ให้บังคับนำทางไปที่ https://chatgpt.com/ ทันที
+        if (window.location.pathname.startsWith('/c/')) {
+            console.warn("[ATF Bridge] Navigation did not change chat URL. Force navigating to root: https://chatgpt.com/");
+            window.location.href = "https://chatgpt.com/";
+            return;
         }
 
         // ล้างชิปไฟล์แนบตกค้างเฉพาะใน Composer (ถ้ามี)
         clearAttachmentChips();
 
         // รอจนกว่ากล่อง Prompt textarea จะโหลดขึ้นมาพร้อมใช้งานจริง (Readiness Check)
-        const input = await waitForPromptInput(15000);
+        let input = await waitForPromptInput(15000);
         if (!input) {
-            throw new Error("Timeout waiting for prompt input box after New Chat.");
+            console.warn("[ATF Bridge] Textarea not found after click. Forcing page redirect to root...");
+            window.location.href = "https://chatgpt.com/";
+            return;
         }
 
         await new Promise(r => setTimeout(r, 400));
@@ -845,13 +886,18 @@
             updateStatus(limitDetected ? "Limit Detected! Need New Chat" : "Ready (Task Completed)", limitDetected ? "#f59e0b" : "#22c55e");
         } catch (err) {
             console.error("[ATF Bridge Error]:", err);
-            // ตรวจสอบและล้างกล่องข้อความทิ้งทันทีหากมีข้อความค้างอยู่ เพื่อป้องกันไม่ให้มี Token สะสมเด็ดขาด
+            // เมื่อเกิดข้อผิดพลาดในการส่งหรือพบ Limit ให้สั่ง Emergency New Chat ล้างห้องเดิมทิ้งทันที!
+            // ป้องกันไม่ให้แชตเดิมที่ปุ่มล็อกค้างอยู่ขวางการส่งรอบถัดไป 100%
             try {
                 const lingeringInput = findPromptInput();
                 if (lingeringInput) {
                     clearPromptInput(lingeringInput);
                 }
-            } catch (e) { }
+                console.warn("[ATF Bridge] Execution error occurred. Triggering auto-recovery New Chat to escape dead room...");
+                await triggerNewChat();
+            } catch (recErr) {
+                console.warn("[ATF Bridge] Recovery New Chat failed:", recErr);
+            }
 
             const safeErrMsg = (err && err.message && err.message.trim().length > 0) ? err.message.trim() : "Unknown ChatGPT Bridge Error";
             const limitCheck = checkAccountRateLimit();

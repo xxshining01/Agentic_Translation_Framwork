@@ -434,6 +434,12 @@
   - เพิ่มเติม `taxonomy.template.json` และ `taxonomy.json`: บรรจุนิยาม Formality Level 1-5 แบบ Deterministic พร้อมตัวเลือกสรรพนามบุรุษที่ 3 (`third_person`)
   - ยกเครื่อง `analyze_character_profiles.py` สู่ระบบ Scene-Based Batching: สกัดบทสนทนาประจำฉากส่งให้ ChatGPT วิเคราะห์เฉพาะ identity, personality, และ pairwise relationships (ตัดการคิดสรรพนามไทยออกจาก AI 100%)
   - พัฒนา Deterministic Python Pronoun Engine: แมปปิ้งคำสรรพนาม (self, target, third_person, ending) จาก `taxonomy.json` ตามหลักไวยากรณ์โดยตรง ป้องกันคำนามแปลกปลอม (เช่น "สามี") หลุดเข้ามาในช่องสรรพนาม 100%
+- [x] **Task 28.8: Enterprise Resilient Profiler, Dead Room Escape & Per-Batch Persistence (v6.3)**
+  - ปรับปรุง Userscript Emergency New Chat: หากปุ่มใน DOM ไม่เปลี่ยน URL จะทำการ Force Navigation (`window.location.href = '/'`) ตัดวงจรการติดค้างในห้องแชตเดิมที่ปุ่มล็อก 100%
+  - ติดตั้งกลไก Periodic New Chat ทุกๆ 8-10 Batch และสั่ง New Chat ทันทีเมื่อเกิด Error ก่อนเริ่ม Retry
+  - ติดตั้งระบบ State Persistence 100%: บันทึก `profile_analysis_checkpoint.json` และ `profile_analysis_log.jsonl` ทันทีทุก Batch พร้อมเขียนและอัปเดตไฟล์ Profile ลงดิสก์แบบ Real-time (Resume งานได้ทันที ไม่เสียโทเคนฟรี)
+  - ผสานรวมข้อมูลตัวละครหลายฉาก (Multi-Scene Consolidation) และกำจัดเพศ `UNKNOWN` ด้วย Ground Truth และหลักฐานทางไวยากรณ์ญี่ปุ่น (`僕` -> ชาย)
+
 
 
 

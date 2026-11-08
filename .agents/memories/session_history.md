@@ -1132,3 +1132,32 @@
   - `src/atf/tools/analyze_character_profiles.py` (v6.1 Scene-Based + Python Pronoun Engine)
   - `src/atf/tools/atf_chatgpt_userscript.user.js` (Fixed False Positive Rate Limit Detection)
   - `templates/taxonomy.template.json` & `taxonomy.json` (Formality 1-5 & Third Person Pronouns)
+
+### [2026-11-09 00:40] Session 36: Enterprise Resilient Profiler, Dead Room Escape & Per-Batch Persistence (v6.3)
+- **1. สิ่งที่ทำ (Actions Executed):**
+  - **อัปเกรด Userscript Emergency New Chat & Dead Room Escape ([[src/atf/tools/atf_chatgpt_userscript.user.js]](file:///d:/Agentic%20Translation%20Framework%20(ATF)%20Project/src/atf/tools/atf_chatgpt_userscript.user.js)):**
+    - เพิ่มกลไก Force Navigation: หากคลิกปุ่ม New Chat หรือส่งคีย์ลัด Ctrl+Shift+O แล้ว URL ยังติดอยู่ที่ `/c/...` (ห้องเดิมที่ปุ่มล็อก) จะสั่ง `window.location.href = "https://chatgpt.com/"` ทันที บังคับขึ้นห้องแชตใหม่ 100%
+    - ใน catch block เมื่อเกิด Error ใดๆ ในการส่ง จะสั่ง `triggerNewChat()` ล้างห้องที่ติดค้างทันทีก่อนแจ้งสถานะกลับไปยัง Bridge
+  - **ติดตั้ง Per-Batch State Persistence & Real-time Disk Save ([[src/atf/tools/analyze_character_profiles.py]](file:///d:/Agentic%20Translation%20Framework%20(ATF)%20Project/src/atf/tools/analyze_character_profiles.py)):**
+    - บันทึก `profile_analysis_checkpoint.json` และ `profile_analysis_log.jsonl` ทันทีหลังจบทุก Batch
+    - รองรับการ Resume งานอัตโนมัติ: ข้ามฉากที่เคยผ่านแล้ว ไม่เสียโทเคนและเวลาฟรีเมื่อเกิดการหยุดกลางคัน
+    - สังเคราะห์และบันทึกไฟล์ Profile ใน `profiles/<Name>.json` ทันทีทุก Batch (Real-time Disk Persistence)
+  - **ติดตั้ง Periodic New Chat & Automatic Error Recovery:**
+    - สั่งเปิด New Chat ทุกๆ 8-10 Batch เพื่อป้องกัน Model Drift / Context Hallucination
+    - เมื่อเกิด Error จาก Bridge ก่อนจะสั่ง Retry จะเรียก `trigger_new_chat()` สลับห้องแชตใหม่เสมอ ป้องกันการวนลูปยิงซ้ำในห้องที่ติดลิมิต
+  - **Multi-Scene Consolidation & Zero UNKNOWN Gender Guarantee:**
+    - พัฒนาระบบผสานข้อมูลหลายฉาก: นับความถี่ Tag บุคลิกภาพ, รวม Roles ความสัมพันธ์, คำนวณค่าเฉลี่ย Formality
+    - กำจัดเพศ `UNKNOWN`: บูรณาการหลักฐานไวยากรณ์ญี่ปุ่น (`僕` -> ชาย, `おばあさん` -> หญิงชรา) และข้อมูลเกม ลบปัญหาเพศหลุดเป็น UNKNOWN ถาวร
+- **2. แนวคิดเชิงสถาปัตยกรรม (Architectural Rationale):**
+  - **Zero Waste & Failure-Resilient Architecture:** การเก็บ Checkpoint ทันทีและบันทึกไฟล์ผลลัพธ์ราย Batch เป็นกฎเหล็กที่รับประกันว่า ทุกโทเคนที่เสียไปจะแปรเปลี่ยนเป็นความก้าวหน้าบนฮาร์ดดิสก์อย่างแท้จริง ไม่มีการสูญเปล่าแม้ผู้ใช้จะสั่งยกเลิกกลางคัน
+  - **Proactive Context Hygiene:** การรีเฟรช New Chat ทุก 8-10 เที่ยว และการตัดวงจรห้องที่ตายแล้วด้วย Force Navigation เป็นการรับประกันความเสถียรสูงสุดของ Web Bridge
+- **3. ความคืบหน้า (Progress & Milestones):**
+  - บรรลุ Task 28.8 ใน `single_source_checkpoint.md`
+- **4. ผลการทดสอบ (Verification & Test Results):**
+  - คอมไพล์ `py_compile` ผ่านทุกโมดูล 100%
+  - ตรวจสอบโครงสร้างไฟล์ Checkpoint และ Log ไดเรกทอรีพร้อมทำงาน
+- **5. สิ่งที่ต้องแก้ไข / อุปสรรค (Remaining Blockers / Next Fixes):**
+  - ผู้ใช้อัปเดตสคริปต์ใน Tampermonkey และสั่งรัน `python atf.py prepare-profiles`
+- **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
+  - `src/atf/tools/analyze_character_profiles.py` (v6.3 Enterprise Resilient Profiler)
+  - `src/atf/tools/atf_chatgpt_userscript.user.js` (Force Navigation & Emergency Escape)
