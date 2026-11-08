@@ -424,6 +424,12 @@
 - [x] **Task 28.5: Master Universal CLI (`atf.py`) & User Manual Alignment**
   - อัปเดต `atf.py` รองรับ Subcommands ย่อยทั้ง 8 สเต็ป (`prepare-scenes` ถึง `prepare-taxonomy`) และคำสั่งรวม `prepare-all`
   - อัปเดต `docs/USER_MANUAL.md` ให้เรียงลำดับขั้นตอนและอธิบายรายละเอียดทั้ง 8 สเต็ปอย่างสมบูรณ์
+- [x] **Task 28.6: Live ChatGPT Bridge Integration in Character Profiler (Stage 3d)**
+  - แก้ไข `analyze_character_profiles.py`: เชื่อมต่อ endpoint จริงของ Bridge Server (`/bridge/status` และ `/v1/chat/completions`)
+  - นำระบบ Silent Dummy Fallback ออก และแทนที่ด้วย `wait_for_bridge_ready()` รอให้ Userscript บน https://chatgpt.com เชื่อมต่อสำเร็จจริง 100% ก่อนเริ่มวิเคราะห์
+  - บังคับการวิเคราะห์ Pairwise Relationships ระหว่างตัวละคร ทำให้ Stage 3e (`sync_profiles_and_matrix.py`) สกัดกฎ `Specific Pairwise Rules > 0` ได้จริง
+  - ปรับปรุง `sync_profiles_and_matrix.py` ให้รองรับทั้ง `speech_style` และ `specific_speech`
+
 
 
 

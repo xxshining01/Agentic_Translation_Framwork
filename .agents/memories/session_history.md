@@ -956,3 +956,35 @@
   - `src/atf/tools/extract_sfx_and_dic.py` (Contextual SFX & Jargon Extractor)
   - `src/atf/tools/generate_game_taxonomy.py` (Game Taxonomy Generator)
   - `docs/USER_MANUAL.md` (Updated Definitive Master User Manual)
+
+### [2026-11-08 18:15] Session 29: Live ChatGPT Bridge Integration in Character Profiler (Stage 3d)
+- **1. สิ่งที่ทำ (Actions Executed):**
+  - **เชื่อมต่อ Live Bridge API ใน `src/atf/tools/analyze_character_profiles.py`:**
+    - เปลี่ยน Endpoint จาก endpoint ปลอม (`/api/heartbeat`, `/api/send`) เป็น Endpoint จริงของ `chatgpt_bridge_server.py` (`GET /bridge/status` และ `POST /v1/chat/completions`)
+    - สร้างฟังก์ชัน `check_bridge_status()` ตรวจสอบทั้ง `status == online` และ `userscript_connected`
+    - สร้างฟังก์ชัน `wait_for_bridge_ready()`: ตัด Silent Dummy Fallback ทิ้งอย่างถาวร หาก Bridge ยังไม่ได้เปิดหรือ Userscript ยังไม่ต่อเข้ามาบนเบราว์เซอร์ ระบบจะแสดงข้อความแจ้งเตือนชัดเจนและรอจนกว่าการเชื่อมต่อจะสมบูรณ์ตามหลัก Fundamental System Principles
+    - พัฒนาฟังก์ชัน `call_chatgpt_api()`: สื่อสารผ่าน OpenAI-compatible format พร้อมระบบ Adaptive Retry และรองรับ Rate Limit (HTTP 429) อัตโนมัติ
+  - **ยกระดับ Prompt และการวิเคราะห์ Pairwise Relationships:**
+    - ส่งบทพูดจริงที่ตัวละครนั้นพูดจากทุก Scene Packets พร้อมรายชื่อตัวละครอื่นที่อยู่ในฉาก/ในเกม เพื่อให้ ChatGPT วิเคราะห์ `relationships` (Target Name, Roles, Affinity, Intimacy, Power Dynamic, และ `speech_style` สรรพนามคู่เจาะจง `self_pronoun`, `target_pronoun`, `ending_particle`)
+    - พัฒนาตัวปรับแต่งโครงสร้าง `normalize_profile_structure()` ให้จัดเรียงข้อมูลลงใน `base_state.relationships` ตามมาตรฐาน ATF V4/V5 ครบถ้วน 100%
+  - **ปรับปรุง `src/atf/tools/sync_profiles_and_matrix.py` (Stage 3e):**
+    - เพิ่มความยืดหยุ่นในการอ่าน `target_name` (รองรับทั้ง `target_name` และ `target_character`)
+    - เพิ่มความยืดหยุ่นในการอ่าน `speech_style` (รองรับทั้ง `speech_style` และ `specific_speech`) ทำให้สามารถดึงความสัมพันธ์จากโปรไฟล์ไปสร้าง `Specific Pairwise Rules > 0` ได้อย่างสมบูรณ์แบบ
+  - **สร้าง `src/atf/__init__.py` และ `src/atf/tools/__init__.py`:**
+    - ทำให้ Python มองเห็นไดเรกทอรีเป็นแพ็กเกจ นำเข้าโมดูลระหว่างกันได้อย่างถูกต้อง
+  - **Commit & Push ขึ้น Git:** Commit `844797f` ขึ้น GitHub `origin/main`
+- **2. แนวคิดเชิงสถาปัตยกรรม (Architectural Rationale):**
+  - **No Silent Fallback Invariant:** การแอบ Fallback เป็นข้อมูลเปล่าเมื่อระบบภายนอกไม่พร้อม ทำให้ข้อมูลใน Pipeline ทั้งหมดผิดเพี้ยนโดยที่ผู้ใช้ไม่ทราบ การบังคับรอ (Wait for Bridge) หรือแจ้งเตือนให้ชัดเจนคือหัวใจของความถูกต้องและความซื่อสัตย์ของระบบ (Truthfulness)
+  - **Explicit Pairwise Grounding:** เมื่อตัวละครวิเคราะห์ความสัมพันธ์จริงผ่าน LLM จะได้คู่สรรพนามที่แม่นยำตามบทบาท เช่น ภรรยากับสามีพูดด้วยความสนิทสนม ตัวละครคุยกับคนแปลกหน้าใช้สรรพนามอีกแบบ ทำให้ Pronoun Matrix ไม่ว่างเปล่า
+- **3. ความคืบหน้า (Progress & Milestones):**
+  - บรรลุ Phase 28 (Task 28.6) ใน `single_source_checkpoint.md`
+- **4. ผลการทดสอบ (Verification & Test Results):**
+  - รัน `python -m py_compile` ผ่านฉลุย 100%
+  - ทดสอบ `check_bridge_status()` ตรวจจับ `(False, False)` ได้ถูกต้อง
+  - ทดสอบ `python src/atf/tools/analyze_character_profiles.py --offline` สกัดและจำแนกข้อมูล 10 ตัวละครลงโฟลเดอร์ผลลัพธ์ได้ครบถ้วนสมบูรณ์
+- **5. สิ่งที่ต้องแก้ไข / อุปสรรค (Remaining Blockers / Next Fixes):**
+  - แจ้งให้ผู้ใช้เปิด Terminal 1 รัน `python atf.py bridge` และเปิดหน้าเว็บ https://chatgpt.com จากนั้นรัน `python atf.py prepare-all` (หรือ `python atf.py prepare-profiles`) ใน Terminal 2 เพื่อเริ่มวิเคราะห์ตัวละครด้วย AI จริง
+- **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
+  - `src/atf/tools/analyze_character_profiles.py` (Live Bridge Connected Profiler)
+  - `src/atf/tools/sync_profiles_and_matrix.py` (Resilient Pairwise Matrix Extractor)
+  - `src/atf/__init__.py`, `src/atf/tools/__init__.py`
