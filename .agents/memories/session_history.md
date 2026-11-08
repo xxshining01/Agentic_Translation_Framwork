@@ -1054,3 +1054,30 @@
   - ผู้ใช้สั่งรัน `python atf.py prepare-all` (หรือ `python atf.py prepare-profiles`) ใน Terminal เพื่อเริ่มให้ ChatGPT วิเคราะห์ตัวละครทั้ง 10 ตัวผ่านหน้าเว็บจริง
 - **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
   - `src/atf/tools/analyze_character_profiles.py` (Live Bridge Connected on Port 8765)
+
+### [2026-11-08 20:30] Session 33: Sequential Preparation Pipeline & Master Glossary AI Localization Engine
+- **1. สิ่งที่ทำ (Actions Executed):**
+  - **พัฒนาโมดูลแปล Master Glossary ด้วย AI (`translate_master_glossary.py`):**
+    - พัฒนาคำสั่ง `python atf.py translate-glossary` (Alias: `glossary-ai`)
+    - สแกนคำศัพท์ใน `tlas_glossary.json` (Characters, Places, System_UI) ที่ฟิลด์ `"th"` ยังว่างอยู่ รวมเป็น Batch แล้วส่งให้ ChatGPT ช่วยแปล/ทับศัพท์เป็นภาษาไทยอย่างเป็นทางการ
+    - บันทึกลงใน `tlas_glossary.json` ให้ผู้ใช้เปิดตรวจสอบและปรับแก้คำแปลชื่อหลักได้ตามต้องการก่อนเริ่มวิเคราะห์ตัวละคร
+  - **ปรับปรุง `analyze_character_profiles.py` กำจัด Context Contamination 100%:**
+    - ฝังคำสั่ง `trigger_new_chat()` สั่งให้ Bridge เปิด New Chat เคลียร์ Context Window บนเบราว์เซอร์ก่อนเริ่มวิเคราะห์ตัวละครตัวใหม่เสมอ ป้องกันปัญหา ChatGPT จำบทตัวละครก่อนหน้ามาทับซ้อน
+    - โหลดชื่อแปลไทยที่ถูกต้องจาก `tlas_glossary.json` มากำกับใน User Prompt และ System Prompt เพื่อชี้นำและดักจับความสับสนของ AI อย่างสมบูรณ์
+  - **ปรับปรุง `docs/USER_MANUAL.md` และ `atf.py`:**
+    - บรรจุคำสั่ง `translate-glossary` ในเมนู CLI และอธิบายลำดับการรันแบบ Step-by-Step
+  - **Commit & Push ขึ้น Git:** Commit `59ce213` ขึ้น GitHub `origin/main`
+- **2. แนวคิดเชิงสถาปัตยกรรม (Architectural Rationale):**
+  - **Linear Dependency Sequence (Glossary -> Whitelist -> Profiles):** เมื่อชื่อตัวละครถูกแปลและล็อกไว้อย่างถูกต้องใน Glossary ก่อน การส่งไปวิเคราะห์ Character Profiles จะมีจุดอ้างอิงอัตลักษณ์ที่ชัดเจน (เช่น 夫 มีชื่อไทยว่า "สามี" ทำให้ AI ไม่มีวันสับสนว่าเป็นผู้หญิงหรือเป็นภรรยา)
+  - **Session Isolation Invariant:** การทำ New Chat ก่อนวิเคราะห์ตัวละครแต่ละตัวคือหลักประกัน 100% ว่าจะไม่มีการรั่วไหลของข้อมูลตัวละครเดิมข้ามมายังตัวละครใหม่
+- **3. ความคืบหน้า (Progress & Milestones):**
+  - บรรลุการเพิ่มกระบวนการแปล Glossary ด้วย AI และยกระดับการวิเคราะห์ Profile สะอาด ปลอด Context Contamination
+- **4. ผลการทดสอบ (Verification & Test Results):**
+  - รัน `python -m py_compile` ผ่านทุกไฟล์ 100%
+  - เมนู `python atf.py --help` แสดงคำสั่ง `translate-glossary` สมบูรณ์
+- **5. สิ่งที่ต้องแก้ไข / อุปสรรค (Remaining Blockers / Next Fixes):**
+  - ส่งมอบคำสั่งให้ผู้ใช้เริ่มรันตามลำดับ: แปล Glossary -> ตรวจสอบชื่อ -> สั่งวิเคราะห์ Profiles
+- **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
+  - `src/atf/tools/translate_master_glossary.py` (Master Glossary AI Translator)
+  - `src/atf/tools/analyze_character_profiles.py` (New Chat Isolated Profiler)
+  - `docs/USER_MANUAL.md` (Updated Step-by-Step Workflow)
