@@ -144,7 +144,7 @@ def build_unified_matrix(all_profiles):
             relationships = pdata.get("relationships", [])
 
         for rel in relationships:
-            target_name = rel.get("target_name")
+            target_name = rel.get("target_name") or rel.get("target_character")
             if not target_name:
                 continue
 
@@ -153,7 +153,7 @@ def build_unified_matrix(all_profiles):
                 continue
             seen_pairs.add(pair_key)
 
-            speech_style = rel.get("speech_style", {})
+            speech_style = rel.get("speech_style") or rel.get("specific_speech") or {}
             specific_rules.append({
                 "type": "SPECIFIC_PAIR",
                 "speaker": speaker_name,

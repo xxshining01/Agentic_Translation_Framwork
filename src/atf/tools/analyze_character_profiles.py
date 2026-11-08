@@ -3,15 +3,18 @@
 """
 ATF Dynamic Character Profile Synthesizer (v6.0 - Agentic LLM-Driven)
 =====================================================================
-วิเคราะห์และสังเคราะห์ไฟล์ Character Profile V4 ของตัวละครแต่ละตัวตาม Whitelist
+วิเคราะห์และสังเคราะห์ไฟล์ Character Profile V4/V5 ของตัวละครแต่ละตัวตาม Whitelist
 โดยส่งบทสนทนาจริงจากฉากต่างๆ ไปให้ ChatGPT (ผ่าน Web Bridge) วิเคราะห์บุคลิกภาพ เพศ วัย
-ลีลาการพูด และความสัมพันธ์ระหว่างตัวละครอย่างแท้จริง
+ลีลาการพูด และความสัมพันธ์ระหว่างตัวละคร (Pairwise Relationships) อย่างแท้จริง
 
 สถาปัตยกรรม:
 - Zero Hardcoding: ปราศจากพจนานุกรมชื่อหรือเพศตัวละครที่ฮาร์ดโค้ดไว้ในโค้ด 100%
-- Factual Scene Harvesting: ดึงประโยคพูดจริงจาก scene_packets.json เพื่อส่งเป็นหลักฐานให้ LLM
-- Bridge Auto-Detection: เชื่อมต่อ ChatGPT Web Bridge (Port 5000) อัตโนมัติ หาก Bridge ออฟไลน์
-  จะสร้าง Baseline Profile ที่เป็นกลางไว้รองรับ และแจ้งเตือนให้ผู้ใช้เปิด Bridge เพื่อวิเคราะห์เชิงลึก
+- Factual Scene Harvesting: ดึงประโยคพูดจริงจาก scene_packets.json / rpgm_scenes_v5.json
+- Bridge Wait & Health Check: ตรวจสอบ /bridge/status และ userscript_connected
+  หากยังไม่พร้อม จะแสดงคำแนะนำและรอจนกว่า ChatGPT Web บนเบราว์เซอร์จะเชื่อมต่อเสร็จสมบูรณ์
+  (รองรับแฟล็ก --offline / --baseline สำหรับสร้าง baseline โดยไม่ต้องต่อ AI หากจำเป็น)
+- Pairwise Relationship Synthesis: บังคับให้ AI วิเคราะห์ความสัมพันธ์ข้ามตัวละคร (Speaker -> Target)
+  เพื่อส่งต่อให้ Stage 3e (sync_profiles_and_matrix.py) สร้าง Specific Pairwise Rules > 0
 - Output: บันทึกไฟล์โปรไฟล์รายบุคคลลงใน <output_tlas_dir>/profiles/<Name>.json
 """
 
@@ -22,7 +25,7 @@ import time
 import urllib.request
 import urllib.error
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     try:
@@ -32,14 +35,16 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
 
 WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 MANIFEST_PATH = os.path.join(WORKSPACE_ROOT, "data", "project_manifest.json")
-TEMPLATE_PROFILE_PATH = os.path.join(WORKSPACE_ROOT, "templates", "character_profile.template.json")
 BRIDGE_URL = "http://localhost:5000"
 
 
 def load_manifest() -> Dict[str, Any]:
     if os.path.exists(MANIFEST_PATH):
-        with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
     return {}
 
 
@@ -53,62 +58,109 @@ def load_json_safe(filepath: str) -> Any:
     return None
 
 
-def is_bridge_online() -> bool:
-    """ตรวจสอบว่า ChatGPT Web Bridge ทำงานอยู่หรือไม่"""
+def check_bridge_status(bridge_url: str = BRIDGE_URL) -> Tuple[bool, bool]:
+    """
+    ตรวจสอบสถานะ Bridge Server และ Userscript
+    คืนค่า: (is_server_online: bool, is_userscript_connected: bool)
+    """
     try:
-        req = urllib.request.Request(f"{BRIDGE_URL}/api/heartbeat", method="GET")
-        with urllib.request.urlopen(req, timeout=2) as resp:
+        req = urllib.request.Request(f"{bridge_url}/bridge/status")
+        with urllib.request.urlopen(req, timeout=3) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return data.get("status") == "ok"
+            is_server = data.get("status") == "online"
+            is_script = bool(data.get("userscript_connected"))
+            return is_server, is_script
     except Exception:
-        return False
+        return False, False
 
 
-def query_bridge(prompt: str, timeout: int = 120) -> str:
-    """ส่งคำสั่งวิเคราะห์ไปยัง ChatGPT ผ่าน Web Bridge"""
-    payload = json.dumps({"prompt": prompt, "mode": "analysis"}).encode("utf-8")
-    req = urllib.request.Request(
-        f"{BRIDGE_URL}/api/send",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        res = json.loads(resp.read().decode("utf-8"))
-        task_id = res.get("task_id")
+def wait_for_bridge_ready(bridge_url: str = BRIDGE_URL) -> bool:
+    """
+    ตรวจสอบและรอความพร้อมของ ChatGPT Web Bridge
+    ตามกฎ [RULE_SYSTEM_PRINCIPLES] & [RULE_PERSISTENT_INVARIANT]:
+    รอจนกว่า Userscript บนหน้าเว็บ ChatGPT จะส่งสัญญาณพร้อมทำงาน 100%
+    """
+    first_notify = True
+    while True:
+        server_ok, script_ok = check_bridge_status(bridge_url)
+        if server_ok and script_ok:
+            print("\n🌐 [ChatGPT Bridge Online & Connected]")
+            print("   Bridge Server พอร์ต 5000 และ Tampermonkey Userscript พร้อมวิเคราะห์ตัวละคร 100%!\n")
+            return True
 
-    if not task_id:
-        raise RuntimeError("No task_id returned from Bridge")
+        if first_notify:
+            print("\n" + "=" * 80)
+            if not server_ok:
+                print("⏳ [Waiting for ChatGPT Bridge Server]")
+                print(f"   ไม่พบ Bridge Server ที่ทำงานบน {bridge_url}")
+                print("   👉 กรุณาเปิด Terminal อีกหน้าต่าง แล้วรันคำสั่ง:")
+                print("      python atf.py bridge")
+                print("   👉 จากนั้นเปิดเบราว์เซอร์ไปที่ https://chatgpt.com")
+            else:
+                print("⏳ [Waiting for ChatGPT Userscript Connection]")
+                print(f"   Bridge Server บนพอร์ต 5000 ทำงานแล้ว แต่ยังไม่พบการเชื่อมต่อจากหน้าเว็บ ChatGPT")
+                print("   👉 กรุณาเปิดเบราว์เซอร์ไปที่ https://chatgpt.com")
+                print("   👉 ตรวจสอบว่าเปิดใช้งาน Tampermonkey Userscript (ATF ChatGPT Bridge)")
+            print("   (ระบบกำลังรอการเชื่อมต่อแบบอัตโนมัติ...)")
+            print("=" * 80 + "\n")
+            first_notify = False
 
-    start_wait = time.time()
-    while time.time() - start_wait < timeout:
-        poll_req = urllib.request.Request(f"{BRIDGE_URL}/api/response/{task_id}", method="GET")
+        time.sleep(2.5)
+
+
+def call_chatgpt_api(prompt: str, system_prompt: str = "", bridge_url: str = BRIDGE_URL) -> str:
+    """
+    ส่งคำขอไปยัง ChatGPT ผ่าน OpenAI-compatible endpoint (/v1/chat/completions)
+    ยึดมั่น [RULE_SYSTEM_PRINCIPLES]: timeout=None และจัดการ Retry เมื่อติด Cooldown
+    """
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
+    payload = json.dumps({
+        "model": "chatgpt-web",
+        "messages": messages
+    }).encode("utf-8")
+
+    while True:
+        req = urllib.request.Request(
+            f"{bridge_url}/v1/chat/completions",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
         try:
-            with urllib.request.urlopen(poll_req, timeout=5) as p_resp:
-                p_data = json.loads(p_resp.read().decode("utf-8"))
-                if p_data.get("status") == "completed":
-                    return p_data.get("response", "")
-                elif p_data.get("status") == "error":
-                    raise RuntimeError(f"Bridge task failed: {p_data.get('error')}")
-        except urllib.error.HTTPError as he:
-            if he.code != 404:
-                raise he
-        time.sleep(2)
-
-    raise TimeoutError("Timed out waiting for ChatGPT response from Bridge")
+            with urllib.request.urlopen(req, timeout=None) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                choices = res_data.get("choices", [])
+                if choices and "message" in choices[0]:
+                    return choices[0]["message"].get("content", "")
+                raise RuntimeError(f"Unexpected response schema from Bridge: {res_data}")
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            if e.code == 429:
+                print(f"⚠️ [ChatGPT Cooldown / Rate Limit] ({err_body})")
+                print("   ระบบจะรอ 60 วินาทีก่อนลองส่งใหม่ตามระเบียบ Adaptive Resilience...")
+                time.sleep(60)
+                continue
+            raise RuntimeError(f"Bridge HTTP Error ({e.code}): {err_body}")
+        except Exception as ex:
+            print(f"⚠️ [Bridge Communication Error]: {ex}. กำลังรอ 5 วินาทีก่อนลองใหม่...")
+            time.sleep(5)
 
 
 def collect_character_dialogues(character_name: str, scene_packets: List[Dict[str, Any]], max_samples: int = 25) -> List[Dict[str, Any]]:
-    """เก็บตัวอย่างบทสนทนาจริงที่ตัวละครนี้พูดจากฉากต่างๆ"""
+    """เก็บตัวอย่างบทสนทนาจริงที่ตัวละครนี้พูดจากฉากต่างๆ พร้อมชื่อผู้ร่วมฉาก"""
     samples = []
     seen_texts = set()
 
     for pkt in scene_packets:
         sc_id = pkt.get("packet_id", "General_Scene")
+        other_chars = [s for s in pkt.get("explicit_speakers", []) if s != character_name]
         for dlg in pkt.get("dialogues", []):
             spk = dlg.get("speaker", "")
             raw_t = dlg.get("clean_text") or dlg.get("text", "")
-            # ตรวจสอบว่าตัวละครนี้พูด หรือมีแท็กชื่อครอบอยู่
             if spk == character_name or f"【{character_name}】" in raw_t or f"[{character_name}]" in raw_t:
                 clean_t = re.sub(r'^[【\[][^】\]]+[】\]]\s*', '', raw_t).strip()
                 if clean_t and clean_t not in seen_texts:
@@ -116,7 +168,7 @@ def collect_character_dialogues(character_name: str, scene_packets: List[Dict[st
                     samples.append({
                         "scene": sc_id,
                         "text": clean_t,
-                        "other_speakers": [s for s in pkt.get("explicit_speakers", []) if s != character_name]
+                        "other_speakers": other_chars
                     })
                     if len(samples) >= max_samples:
                         return samples
@@ -124,47 +176,102 @@ def collect_character_dialogues(character_name: str, scene_packets: List[Dict[st
     return samples
 
 
-def build_analysis_prompt(character_name: str, samples: List[Dict[str, Any]]) -> str:
-    """สร้าง System Prompt บังคับคืนค่า Schema Profile V4 จากหลักฐานบทพูดจริง"""
+def build_analysis_prompt(character_name: str, samples: List[Dict[str, Any]], all_known_characters: List[str]) -> Tuple[str, str]:
+    """สร้าง System Prompt และ User Prompt เพื่อวิเคราะห์ Character Profile & Pairwise Relationships"""
+    other_known = [c for c in all_known_characters if c != character_name]
+    other_str = ", ".join([f'"{c}"' for c in other_known]) if other_known else "None identified"
+
     lines_formatted = []
     for idx, s in enumerate(samples, start=1):
-        others = f" (Scene: {s['scene']} | Present: {', '.join(s['other_speakers']) if s['other_speakers'] else 'Solo'})"
+        others = f" [Scene: {s['scene']} | Present: {', '.join(s['other_speakers']) if s['other_speakers'] else 'Solo'}]"
         lines_formatted.append(f"{idx}. {repr(s['text'])}{others}")
 
     dialogue_block = "\n".join(lines_formatted)
 
-    return f"""You are an elite video game narrative analyst and localization persona architect.
-Analyze the following video game character based STRICTLY on their actual in-game dialogue evidence:
+    system_prompt = """You are an elite video game narrative analyst, linguist, and Japanese-to-Thai localization architect.
+Your mission is to perform an in-depth linguistic and narrative profile analysis of a Japanese video game character based STRICTLY on evidence from their actual in-game dialogue samples.
 
-Character Name: "{character_name}"
-Sample Dialogue Lines from In-Game Scenes:
+CRITICAL INVARIANTS:
+1. Zero Speculation: Ground all conclusions (gender, age, personality, relationships) on concrete Japanese linguistic cues (sentence particles like わ/ぜ/ぞ/よ, self-pronouns like 俺/僕/私/あたし, speech registers, and scene interactions).
+2. Anti-Politeness Bias: If the character speaks crudely, like a delinquent, or intimately with a close partner, DO NOT default to polite "ผม/คุณ/ครับ". Select authentic Thai speech registers (เช่น ฉัน/เธอ, ข้า/เอ็ง, กู/มึง, นาย/แก ตามบริบท).
+3. Pairwise Relationships: For each known character present in the scenes or spoken to, define explicit reciprocal speech styles (self_pronoun, target_pronoun, ending_particle).
+4. Strict JSON Output: Output ONLY a single valid, parseable JSON object matching the requested schema. No conversational preamble, no markdown comments."""
+
+    user_prompt = f"""Target Character to Analyze: "{character_name}"
+Other Known Characters in this Game: [{other_str}]
+
+In-Game Dialogue Samples for "{character_name}":
 {dialogue_block}
 
-### YOUR OBJECTIVE:
-Synthesize an evidence-grounded V4 Character Profile JSON with:
-1. "character_id": Unique uppercase ID (e.g. "CHAR_{character_name.upper()}")
-2. "name": "{character_name}"
-3. "th_name": Approved Thai translation/transliteration for this name
-4. "identity":
-   - "gender": "MALE" | "FEMALE" | "NON_BINARY" | "UNKNOWN"
-   - "age": "CHILD" | "TEEN" | "ADULT" | "ELDER"
-   - "species": "HUMAN" | other
-5. "base_speech_style":
-   - "self_pronoun": Recommended natural Thai first-person pronoun (e.g. ฉัน, ผม, ข้า, กู, พี่, หนู, เรา)
-   - "ending_particle": Recommended Thai ending polite or colloquial particle (e.g. ครับ, ค่ะ, จ้ะ, วะ, ยะ, or empty string "")
-   - "formality_level": Integer from 1 (very vulgar/intimate) to 5 (highly formal/reverent)
-6. "personality": List of trait objects [{{"tag": "PER_...", "weight": 1..100, "description": "..."}}]
-7. "speech_habit": List of habits [{{"tag": "SPR_...", "weight": 1..100, "description": "..."}}]
-8. "relationships": List of relationship objects with other characters detected in the scenes:
-   [{{"target_name": "...", "roles": ["ROLE_..."], "affinity": "AFF_...", "intimacy": "INT_...", "power_dynamic": "DYN_...", "speech_style": {{"self_pronoun": "...", "target_pronoun": "...", "ending_particle": "..."}}}}]
+### INSTRUCTIONS:
+Analyze the character above and output a comprehensive JSON profile conforming to this exact structure:
 
-MANDATORY RULES:
-- Output ONLY a valid JSON object matching the requested schema.
-- Do NOT wrap in markdown formatting or conversational text. Return ONLY the raw JSON string."""
+{{
+  "character_id": "CHAR_{re.sub(r'[^A-Za-z0-9]', '', character_name).upper() or 'UNKNOWN'}",
+  "name": "{character_name}",
+  "th_name": "Recommended Thai name translation/transliteration",
+  "aliases": ["{character_name}"],
+  "identity": {{
+    "gender": "MALE" | "FEMALE" | "NON_BINARY" | "UNKNOWN",
+    "age": "CHILD" | "TEEN" | "ADULT" | "ELDER" | "UNKNOWN",
+    "species": "HUMAN",
+    "number": "{"PLURAL" if "2人" in character_name or "たち" in character_name else "SINGULAR"}"
+  }},
+  "base_speech_style": {{
+    "self_pronoun": "Default natural Thai 1st-person pronoun (e.g. ฉัน, ผม, หนู, เค้า, ข้า)",
+    "ending_particle": "Default ending particle (e.g. ค่ะ, ครับ, จ้ะ, นะ, วะ, or empty string)",
+    "formality_level": 1 to 5 (1=intimate/vulgar, 3=neutral/casual, 5=formal)
+  }},
+  "base_state": {{
+    "personality": [
+      {{"tag": "PER_SOC_...", "weight": 70, "description": "brief trait description"}}
+    ],
+    "speech_habit": [
+      {{"tag": "SPR_...", "weight": 70, "description": "brief habit description"}}
+    ],
+    "values": [],
+    "relationships": [
+      {{
+        "target_name": "Exact Japanese name of related character from the known list",
+        "roles": ["ROLE_FAM_...", "ROLE_SOC_..."],
+        "affinity": "AFF_LOVING" | "AFF_FRIENDLY" | "AFF_NEUTRAL" | "AFF_DISLIKE" | "AFF_HOSTILE",
+        "intimacy": "INT_INTIMATE" | "INT_CLOSE" | "INT_CASUAL" | "INT_DISTANT" | "INT_ESTRANGED",
+        "power_dynamic": "DYN_DOMINANT" | "DYN_EQUAL" | "DYN_SUBMISSIVE",
+        "speech_style": {{
+          "self_pronoun": "Thai pronoun this character calls themselves when speaking to THIS target",
+          "target_pronoun": "Thai pronoun this character uses to address THIS target",
+          "third_person_pronoun": "Thai pronoun when referring to this target to a 3rd party",
+          "ending_particle": "Ending particle used with this target",
+          "formality_level": 1 to 5
+        }}
+      }}
+    ]
+  }}
+}}
+
+Return ONLY the raw JSON object."""
+
+    return system_prompt, user_prompt
+
+
+def extract_json_object(text: str) -> Dict[str, Any]:
+    """สกัดและแปลง JSON object จากข้อความตอบกลับของ LLM อย่างสมบูรณ์"""
+    text = text.strip()
+    # กำจัด markdown code block ถ้ามี
+    clean_text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.MULTILINE)
+    clean_text = re.sub(r'\s*```$', '', clean_text, flags=re.MULTILINE)
+
+    # ค้นหา { ... } ตัวนอกสุด
+    match = re.search(r'\{.*\}', clean_text, re.DOTALL)
+    if match:
+        json_candidate = match.group(0)
+        return json.loads(json_candidate)
+
+    return json.loads(clean_text)
 
 
 def generate_baseline_fallback_profile(character_name: str, count: int, samples: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """สร้าง Profile ตั้งต้นที่เป็นกลาง หากยังไม่ได้เชื่อมต่อ ChatGPT Bridge"""
+    """สร้าง Profile ตั้งต้นที่เป็นกลาง หากระบุแฟล็ก --offline / --baseline"""
     return {
         "character_id": f"CHAR_{re.sub(r'[^A-Za-z0-9]', '', character_name).upper() or 'UNKNOWN'}",
         "name": character_name,
@@ -174,7 +281,7 @@ def generate_baseline_fallback_profile(character_name: str, count: int, samples:
             "gender": "UNKNOWN",
             "age": "ADULT",
             "species": "HUMAN",
-            "number": "SINGULAR"
+            "number": "PLURAL" if "2人" in character_name or "たち" in character_name else "SINGULAR"
         },
         "base_speech_style": {
             "self_pronoun": "ฉัน",
@@ -188,9 +295,75 @@ def generate_baseline_fallback_profile(character_name: str, count: int, samples:
             "relationships": []
         },
         "_metadata": {
-            "synthesized_by": "baseline_heuristic_pending_llm",
+            "synthesized_by": "baseline_heuristic_offline",
             "dialogue_count": count,
             "sample_lines_recorded": len(samples)
+        }
+    }
+
+
+def normalize_profile_structure(raw_profile: Dict[str, Any], character_name: str, count: int, samples_len: int) -> Dict[str, Any]:
+    """ตรวจสอบและปรับแต่งโครงสร้าง Profile ให้ตรงตามมาตรฐาน ATF V4/V5 อย่างสมบูรณ์ 100%"""
+    char_id = raw_profile.get("character_id") or f"CHAR_{re.sub(r'[^A-Za-z0-9]', '', character_name).upper() or 'UNKNOWN'}"
+    ident = raw_profile.get("identity", {})
+    base_style = raw_profile.get("base_speech_style", {})
+
+    # จัดการ base_state และ relationships
+    base_state = raw_profile.get("base_state", {})
+    raw_rels = base_state.get("relationships") or raw_profile.get("relationships") or []
+
+    normalized_rels = []
+    seen_targets = set()
+    for rel in raw_rels:
+        t_name = rel.get("target_name") or rel.get("target_character") or ""
+        if not t_name or t_name in seen_targets:
+            continue
+        seen_targets.add(t_name)
+
+        speech = rel.get("speech_style") or rel.get("specific_speech") or {}
+        normalized_rels.append({
+            "target_character_id": rel.get("target_character_id") or f"CHAR_{re.sub(r'[^A-Za-z0-9]', '', t_name).upper() or 'TARGET'}",
+            "target_name": t_name,
+            "roles": rel.get("roles") or ["ROLE_SOC_ACQUAINTANCE"],
+            "affinity": rel.get("affinity", "AFF_NEUTRAL"),
+            "intimacy": rel.get("intimacy", "INT_DISTANT"),
+            "power_dynamic": rel.get("power_dynamic", "DYN_EQUAL"),
+            "speech_style": {
+                "self_pronoun": speech.get("self_pronoun", base_style.get("self_pronoun", "ฉัน")),
+                "target_pronoun": speech.get("target_pronoun", "คุณ"),
+                "third_person_pronoun": speech.get("third_person_pronoun", "เขา"),
+                "ending_particle": speech.get("ending_particle", ""),
+                "formality_level": speech.get("formality_level", 3)
+            }
+        })
+
+    return {
+        "character_id": char_id,
+        "name": character_name,
+        "th_name": raw_profile.get("th_name") or character_name,
+        "aliases": raw_profile.get("aliases") or [character_name],
+        "identity": {
+            "gender": ident.get("gender", "UNKNOWN").upper(),
+            "age": ident.get("age", "ADULT").upper(),
+            "species": ident.get("species", "HUMAN").upper(),
+            "number": "PLURAL" if "2人" in character_name or "たち" in character_name else ident.get("number", "SINGULAR").upper()
+        },
+        "base_speech_style": {
+            "self_pronoun": base_style.get("self_pronoun", "ฉัน"),
+            "ending_particle": base_style.get("ending_particle", ""),
+            "formality_level": int(base_style.get("formality_level", 3))
+        },
+        "base_state": {
+            "personality": base_state.get("personality") or raw_profile.get("personality") or [{"tag": "PER_SOC_NEUTRAL", "weight": 50}],
+            "speech_habit": base_state.get("speech_habit") or raw_profile.get("speech_habit") or [{"tag": "SPR_STANDARD", "weight": 50}],
+            "values": base_state.get("values") or [],
+            "relationships": normalized_rels
+        },
+        "_metadata": {
+            "synthesized_by": "chatgpt_web_bridge_v6",
+            "dialogue_count": count,
+            "sample_lines_recorded": samples_len,
+            "total_relationships_identified": len(normalized_rels)
         }
     }
 
@@ -199,8 +372,10 @@ def analyze_character_profiles():
     manifest = load_manifest()
     tlas_dir = manifest.get("output_tlas_dir") or os.path.join(WORKSPACE_ROOT, "data", "tlas")
     whitelist_path = os.path.join(tlas_dir, "character_whitelist.json")
-    scenes_path = manifest.get("output_scenes_json") or os.path.join(tlas_dir, "scene_packets.json")
+    scenes_path = manifest.get("output_scenes_json") or os.path.join(tlas_dir, "rpgm_scenes_v5.json")
     profiles_dir = manifest.get("output_profiles_dir") or os.path.join(tlas_dir, "profiles")
+
+    offline_mode = "--offline" in sys.argv or "--baseline" in sys.argv
 
     print("=" * 80)
     print("      ATF DYNAMIC CHARACTER PROFILE SYNTHESIZER (v6.0 - Agentic LLM)      ")
@@ -224,45 +399,42 @@ def analyze_character_profiles():
     packets = scene_data.get("packets", [])
     print(f"[*] Loaded {len(packets)} Scene Packets from: {scenes_path}")
 
-    # 3. ตรวจสอบ Bridge
-    bridge_ready = is_bridge_online()
-    if bridge_ready:
-        print("🌐 [ChatGPT Bridge Online] Web Bridge Server is active on port 5000.")
-        print("    Will perform live AI character persona and relationship synthesis!\n")
+    # 3. จัดการ Bridge
+    all_known_names = [c.get("name") for c in qualified_chars if c.get("name")]
+    if not offline_mode:
+        wait_for_bridge_ready(BRIDGE_URL)
     else:
-        print("⚠️ [ChatGPT Bridge Offline] Web Bridge is not running on port 5000.")
-        print("    Generating clean evidence-grounded baseline profiles.")
-        print("    💡 Run 'python atf.py bridge' in another terminal and re-run this command to synthesize with AI.\n")
+        print("⚠️ [Offline Mode] Generating evidence-grounded baseline profiles without Bridge.")
 
     os.makedirs(profiles_dir, exist_ok=True)
     synthesized_count = 0
+    total_relationships = 0
 
     for ch in qualified_chars:
         char_name = ch.get("name")
         char_lines = ch.get("dialogue_count", 0)
         out_file = os.path.join(profiles_dir, f"{char_name}.json")
 
-        print(f"[*] Processing Character: 【{char_name}】 ({char_lines} dialogue lines)...")
+        print(f"\n[*] Processing Character: 【{char_name}】 ({char_lines} dialogue lines)...")
         samples = collect_character_dialogues(char_name, packets, max_samples=25)
         print(f"    - Collected {len(samples)} distinct in-game dialogue samples.")
 
         profile_data = None
 
-        if bridge_ready and samples:
-            prompt = build_analysis_prompt(char_name, samples)
+        if not offline_mode and samples:
+            system_prompt, user_prompt = build_analysis_prompt(char_name, samples, all_known_names)
             print("    - Querying ChatGPT via Web Bridge for Persona & Relationship analysis...")
             try:
-                resp = query_bridge(prompt, timeout=90)
-                clean_json_str = re.sub(r'^```json\s*|\s*```$', '', resp.strip())
-                parsed = json.loads(clean_json_str)
-                if isinstance(parsed, dict) and "name" in parsed:
-                    profile_data = parsed
-                    profile_data["_metadata"] = {
-                        "synthesized_by": "chatgpt_web_bridge_v6",
-                        "dialogue_count": char_lines,
-                        "sample_lines_recorded": len(samples)
-                    }
-                    print(f"    [✔] AI Synthesis Successful: Gender={parsed.get('identity', {}).get('gender')}, Age={parsed.get('identity', {}).get('age')}, Pronoun={parsed.get('base_speech_style', {}).get('self_pronoun')}")
+                raw_resp = call_chatgpt_api(user_prompt, system_prompt=system_prompt, bridge_url=BRIDGE_URL)
+                parsed = extract_json_object(raw_resp)
+                if isinstance(parsed, dict):
+                    profile_data = normalize_profile_structure(parsed, char_name, char_lines, len(samples))
+                    ident = profile_data.get("identity", {})
+                    speech = profile_data.get("base_speech_style", {})
+                    rels = profile_data.get("base_state", {}).get("relationships", [])
+                    total_relationships += len(rels)
+                    print(f"    [✔] AI Analysis Success: Gender={ident.get('gender')}, Age={ident.get('age')}, Pronoun={speech.get('self_pronoun')}")
+                    print(f"    [✔] Identified {len(rels)} Pairwise Relationships: {[r.get('target_name') for r in rels]}")
             except Exception as e:
                 print(f"    [!] AI query warning: {e}. Falling back to baseline profile.")
 
@@ -277,9 +449,9 @@ def analyze_character_profiles():
 
     print("\n" + "=" * 80)
     print(f"🎉 Successfully Generated {synthesized_count} Character Profiles in: {profiles_dir}")
+    print(f"📊 Total Pairwise Relationships Discovered: {total_relationships}")
     print("=" * 80 + "\n")
 
 
 if __name__ == "__main__":
     analyze_character_profiles()
-
