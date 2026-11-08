@@ -387,11 +387,17 @@
 
 ---
 
-### Phase 26: Standalone Plugin UI Text Extractor for New Projects
-- [x] **Task 26.1: Standalone Multi-File Plugin Extractor (`extract_game_plugins.py`)**
-  - พัฒนาโปรแกรมสกัดข้อความ UI เมนูจากปลั๊กอินทุกตัวของเกม สำหรับสร้างไฟล์ `plugins_texts.csv` ก่อนเริ่มโปรเจกต์ใหม่
-  - ออกแบบระบบ Interactive: ถามหาโฟลเดอร์เกมต้นทาง -> ตรวจหา `/js` อัตโนมัติ (รองรับทั้ง `www/js` และ `js`) -> สแกน `plugins.js` (Nested Parameters) และ `plugins/*.js` (Code Literals & UI Commands) -> ถามหาพิกัดบันทึกไฟล์ปลายทาง (Default: `data/plugins_texts.csv`)
-  - คัดกรองรหัส JavaScript, ตัวแปร, และ Asset filenames ออก สกัดเฉพาะ Human-Readable UI Texts
-- [x] **Task 26.2: Workflow Synchronization with `atf.py setup`**
-  - บรรจุคำแนะนำขั้นตอนที่ 3.0 ลงใน `docs/USER_MANUAL.md` และ Command Cheat Sheet เพื่อให้ไฟล์ที่สกัดได้พร้อมต่อยอดเข้า `python atf.py setup` ได้ทันที
+### Phase 27: Clean Slate Game Onboarding & Universal Pipeline Alignment
+- [x] **Task 27.1: Clean Slate Path Synchronization & Auto-Mirroring**
+  - แก้ไข `atf.py prepare-all`: เมื่อเตรียมข้อมูลเสร็จสมบูรณ์ ระบบจะซิงค์ไฟล์ฐานข้อมูลทั้งหมดจาก `data/tlas/` (`tlas_glossary.json`, `character_whitelist.json`, `profiles/`, `global_pronoun_matrix.json`, `scene_packets.json`, `scanned_speakers.json`) ไปยังโฟลเดอร์ผลลัพธ์ของโปรเจกต์ (`output_tlas_dir`) ใน Manifest อัตโนมัติ 100%
+  - แก้ไข `chatgpt_translator_runner.py`: ปรับ `__init__` ให้มี Self-healing Fallback ค้นหาไฟล์ฐานข้อมูลทั้งจาก Manifest และ Local Workspace พร้อม Auto-sync กลับสู่โฟลเดอร์ผลลัพธ์
+- [x] **Task 27.2: Universal CSV Schema Dynamic Indexing (10-Col / 8-Col / 5-Col)**
+  - แก้ไข `chatgpt_translator_runner.py`: ถอด Hardcoded Index (`row[7] = Displayable`, `row[2] = Filename`) ใน `translate_empty_rows` และ `translate_plugins_csv`
+  - ตรวจหาชื่อคอลัมน์จาก Header โดยตรง (`Original`, `Initial`, `Displayable`, `Speaker`, `Role`, `Listener`, `Filename`) รองรับตารางมาตรฐาน 10 มิติ (`Displayable` อยู่ที่ index 2) และ Fallback สำหรับไฟล์ที่ไม่มีคอลัมน์ `Displayable` ให้เป็น `"Yes"`
+- [x] **Task 27.3: Unified Runner Input Target Prioritization**
+  - แก้ไข `run_unified_all`: จัดลำดับการค้นหาไฟล์แปลบทสนทนาหลัก: ให้ความสำคัญกับ `output_enriched_csv` เป็นอันดับแรก ตามด้วย `output_processed_csv` และ `raw_pre_csv`
+  - จัดลำดับการค้นหาไฟล์แปลปลั๊กอิน: ตรวจสอบ `output_plugins_csv`, `legacy_plugin_csv`, `<output_dir>/plugins_texts.csv`, และ `data/plugins_texts.csv`
+- [x] **Task 27.4: SceneContextManager Robust Parsing for Packet Schema**
+  - ปรับปรุง `scene_context_manager.py`: รองรับโครงสร้าง `scene_packets.json` ที่มีคีย์ `packets` ป้องกันข้อผิดพลาด `'str' object has no attribute 'get'` เมื่ออ่าน JSON แบบ Dict
+
 

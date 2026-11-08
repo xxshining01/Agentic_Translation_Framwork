@@ -917,27 +917,34 @@
   - `README.md` (Updated Architectural Hub)
   - `archive/` (`legacy_agents/`, `legacy_tools/`, `root_scripts/`)
 
-### [2026-11-08 15:30] Session 26: Standalone Multi-File Plugin UI Text Extractor (`extract_game_plugins.py`)
+### [2026-11-08 16:15] Session 27: Clean Slate Game Onboarding & Universal Pipeline Alignment
 - **1. สิ่งที่ทำ (Actions Executed):**
-  - พัฒนาเครื่องมือสกัดอิสระ `extract_game_plugins.py` ใน Root Directory สำหรับเตรียมไฟล์ `plugins_texts.csv` จากโปรเจกต์เกมใหม่
-  - วางระบบ Interactive CLI แบบถาม-ตอบ 3 สเต็ป:
-    1. รับอินพุตโฟลเดอร์เกมต้นทาง (รองรับลากโฟลเดอร์มาวาง ลบเครื่องหมายคำพูดอัตโนมัติ)
-    2. ค้นหาโฟลเดอร์ `/js` อัตโนมัติ (ตรวจจับ `www/js` และ `js`)
-    3. สแกนสกัดข้อความ UI จากทั้ง `plugins.js` (Nested JSON Parameters) และ `plugins/*.js` (Code Literals & UI Functions)
-    4. แสดงสรุปผล และถามหาตำแหน่งสำหรับวางไฟล์ CSV ปลายทาง (Default: `data/plugins_texts.csv`)
-  - อัปเดต `docs/USER_MANUAL.md` เพิ่มขั้นตอน 3.0 และอัปเดต Command Cheat Sheet
+  - **แก้ไขปัญหา Path Resolution & Auto-Sync ของเกมใหม่ (Clean Slate):**
+    - แก้ไข `src/atf/tools/chatgpt_translator_runner.py` ให้มี Self-healing Fallback ค้นหาไฟล์ฐานข้อมูลทั้งจาก Manifest Target และ Local Workspace (`data/tlas/`) พร้อม Auto-sync กลับสู่โฟลเดอร์ผลลัพธ์ของโปรเจกต์อัตโนมัติ
+    - ปรับปรุง `atf.py prepare-all` ให้คัดลอก/ซิงค์ไฟล์ฐานข้อมูลทั้งหมดจาก `data/tlas/` ไปยัง `output_tlas_dir` ทันทีที่ขั้นตอนเตรียมข้อมูล 5 สเต็ปเสร็จสิ้น
+  - **แก้ปัญหา Dynamic CSV Indexing & Displayable Filtering:**
+    - เปลี่ยนตรรกะใน `translate_empty_rows` และ `translate_plugins_csv` จาก Hardcoded Index (`row[7] = Displayable`) เป็น Dynamic Header Detection ค้นหา index ตามชื่อคอลัมน์จริง รองรับตารางมาตรฐาน 10 มิติ (`Displayable` อยู่ที่ index 2) และตาราง 5 มิติตั้งต้น
+    - จัดลำดับไฟล์เป้าหมายใน `run_unified_all`: ตรวจสอบ `output_enriched_csv` ก่อน `output_processed_csv`
+    - เพิ่ม Candidate Resolution สำหรับ `plugins_file` ตรวจหา `output_plugins_csv`, `legacy_plugin_csv`, และ `<output_dir>/plugins_texts.csv`
+  - **แก้ปัญหา SceneContextManager Dict Parsing:**
+    - รองรับโครงสร้าง `scene_packets.json` ที่มีคีย์ `packets` ป้องกันข้อผิดพลาด `'str' object has no attribute 'get'`
+  - **แก้ปัญหา `setup_project_paths.py` Hardcoded Plugin File Name:**
+    - เปลี่ยนจาก `"plugins_texts_v035.csv"` เป็น `"plugins_texts.csv"` หรือค่าจาก `legacy_plugin_csv`
 - **2. แนวคิดเชิงสถาปัตยกรรม (Architectural Rationale):**
-  - **Decoupled Pre-flight Utilities:** การแยกเครื่องมือเตรียมข้อมูลเบื้องต้นออกจาก Main Pipeline ทำให้ Framework มีความยืดหยุ่นสูง รองรับทั้งเกมเก่าและเกมใหม่ที่ไม่มีไฟล์ Plugin CSV มาก่อน
-  - **Safe UI Semantic Filtering:** สกัดเฉพาะข้อความแสดงผลภาษาธรรมชาติ (Japanese Kana/Kanji/Thai/UI labels) โดยไม่แตะต้องโค้ด สคริปต์ ตัวแปร หรือชื่อไฟล์ภาพ
+  - **Self-Healing Adaptive Resilience:** ระบบต้องสามารถระบุตำแหน่งทรัพยากรได้อย่างชาญฉลาดและเชื่อมโยงไฟล์จากทุกโฟลเดอร์โดยอัตโนมัติ ไม่ล้มเหลวเพียงเพราะไฟล์อยู่ใน Workspace แทนที่จะอยู่ใน Output Folder
+  - **Universal Schema Independence:** โค้ดแปลต้องไม่ผูกติดกับ Index คงที่ของคอลัมน์ แต่ต้องอ้างอิงจาก Semantic Header ของตารางเสมอ เพื่อรองรับไฟล์ CSV จากทุกเครื่องมือและทุกเวอร์ชัน
 - **3. ความคืบหน้า (Progress & Milestones):**
-  - บรรลุ Phase 26 (Tasks 26.1 - 26.2) ใน `single_source_checkpoint.md`
+  - บรรลุ Phase 27 (Tasks 27.1 - 27.4) ใน `single_source_checkpoint.md`
 - **4. ผลการทดสอบ (Verification & Test Results):**
-  - รันการทดสอบ Unit Test จำลองโครงสร้าง RPG Maker MV (`test_plugin_extractor.py`):
-    - สกัด `回想モード` จาก `plugins.js` สำเร็จ 100%
-    - สกัด `CGギャラリー` และ `設定` จาก `plugins/SamplePlugin.js` สำเร็จ 100%
-    - ส่งออกเป็นไฟล์ CSV มาตรฐาน 8 คอลัมน์ (UTF-8-SIG) พร้อมใช้งาน
+  - รัน `scratch/test_empty_scan.py` กับไฟล์จริง `5 Days of Separation After Story+_enriched.csv`:
+    - สแกนพบครบ 1,564 แถว
+    - แยก `Displayable == Yes`: 1,331 แถว (เข้าคิวส่งแปลให้ LLM ถูกต้อง 100%)
+    - แยก `Displayable == No`: 233 แถว (ป้องกัน Game Internals ด้วย Game Shielding สำเร็จ)
+  - รัน `python src/atf/tools/chatgpt_translator_runner.py --dry-run`: ผ่านฉลุย 15/15 รายการ คะแนน LQA 100.0/100.0 ปลอด Error และ Warning ทุกชนิด
 - **5. สิ่งที่ต้องแก้ไข / อุปสรรค (Remaining Blockers / Next Fixes):**
-  - ไม่มี (พร้อมให้ผู้ใช้นำไปสกัดเกมใหม่ได้ทันที)
+  - ไม่มี (ระบบพร้อมสำหรับการรันแปลจริง 100%)
 - **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
-  - `extract_game_plugins.py` (Standalone Multi-File Plugin UI Text Extractor)
-  - `docs/USER_MANUAL.md` (Updated with Step 3.0 Pre-flight Extractor Guide)
+  - `src/atf/tools/chatgpt_translator_runner.py` (Self-Healing Paths, Dynamic Indexing & Unified Candidate Prioritization)
+  - `src/atf/core/scene_context_manager.py` (Robust Packet Schema Parsing)
+  - `atf.py` (Automatic Post-Preparation TLAS Sync)
+  - `src/atf/tools/setup_project_paths.py` (Universal Plugin Filename Resolution)
