@@ -461,13 +461,39 @@ def load_manifest(workspace_root: str = WORKSPACE_ROOT) -> Dict[str, Any]:
 
 def main():
     manifest = load_manifest()
-    default_input = manifest.get("output_translated_csv") or os.path.join("output", "translated.csv")
-    default_output = manifest.get("output_enriched_csv") or os.path.join("output", "enriched_translated.csv")
+    
+    # 1. ตรวจหาไฟล์ Input ตามลำดับความสำคัญใน Manifest
+    default_input = (
+        manifest.get("output_processed_csv") or 
+        manifest.get("raw_pre_csv") or 
+        manifest.get("output_translated_csv")
+    )
+    if not default_input or not os.path.exists(default_input):
+        for candidate in [
+            os.path.join(WORKSPACE_ROOT, "output", "processed_dialogues.csv"),
+            os.path.join(WORKSPACE_ROOT, "output", "translated.csv")
+        ]:
+            if os.path.exists(candidate):
+                default_input = candidate
+                break
+
+    # 2. ตรวจหาหรือสร้างชื่อไฟล์ Output ในโฟลเดอร์ output_dir
+    default_output = manifest.get("output_enriched_csv")
+    if not default_output:
+        out_dir = manifest.get("output_dir") or os.path.join(WORKSPACE_ROOT, "output")
+        if default_input:
+            base_name = os.path.splitext(os.path.basename(default_input))[0]
+            # ตัด suffix _translated ออกถ้ามี แล้วเติม _enriched
+            clean_name = base_name.replace("_translated", "")
+            default_output = os.path.join(out_dir, f"{clean_name}_enriched.csv")
+        else:
+            default_output = os.path.join(out_dir, "enriched_localization.csv")
+
     default_game_data = manifest.get("game_data_directory") or os.path.join("www", "data")
     default_scene_packets = os.path.join(WORKSPACE_ROOT, "data", "tlas", "scene_packets.json")
 
     parser = argparse.ArgumentParser(description="ATF Universal Enriched Localization CSV Generator")
-    parser.add_argument("--input", type=str, default=default_input, help="Path to input translated CSV")
+    parser.add_argument("--input", type=str, default=default_input, help="Path to input dialogue CSV")
     parser.add_argument("--output", type=str, default=default_output, help="Path to output enriched CSV")
     parser.add_argument("--game-data", type=str, default=default_game_data, help="Path to RPG Maker www/data folder")
     parser.add_argument("--scene-packets", type=str, default=default_scene_packets, help="Path to scene packets JSON")
@@ -479,6 +505,19 @@ def main():
         game_data_dir=args.game_data,
         scene_packets_path=args.scene_packets
     )
+
+    # บันทึกตำแหน่ง output_enriched_csv ลง manifest อัตโนมัติ เพื่อให้คำสั่งอื่น (translate, verify) เรียกใช้ได้ทันที
+    if os.path.exists(args.output):
+        manifest_path = os.path.join(WORKSPACE_ROOT, "data", "project_manifest.json")
+        if os.path.exists(manifest_path):
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as mf:
+                    mf_data = json.load(mf)
+                mf_data["output_enriched_csv"] = os.path.abspath(args.output)
+                with open(manifest_path, "w", encoding="utf-8") as mf:
+                    json.dump(mf_data, mf, indent=2, ensure_ascii=False)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

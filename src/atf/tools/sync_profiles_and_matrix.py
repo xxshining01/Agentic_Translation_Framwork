@@ -57,6 +57,14 @@ def clean_profiles_and_enrich():
     """
     print("[*] Processing and sanitizing character profiles on disk...")
     profile_files = glob.glob(os.path.join(PROFILES_DIR, "*.json"))
+    if not profile_files:
+        print("[*] No profiles found in profiles directory. Synthesizing clean profiles from whitelist...")
+        try:
+            from atf.tools.synthesize_clean_profiles import synthesize_clean_profiles
+            synthesize_clean_profiles()
+            profile_files = glob.glob(os.path.join(PROFILES_DIR, "*.json"))
+        except Exception as e:
+            print(f"[!] Warning: Could not auto-synthesize profiles: {e}")
 
     cleaned_count = 0
     all_profiles = {}
