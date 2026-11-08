@@ -1867,10 +1867,21 @@ def run_encrypt(rendered_dir: Optional[str] = None, target_dir: Optional[str] = 
     png_files = glob.glob(os.path.join(src_rendered, "*.png"))
     print(f"📦 Found {len(png_files):,} images ready to encrypt.")
 
+    game_img_root = os.path.join(paths["game_dir"], "www", "img")
+    if not os.path.exists(game_img_root):
+        game_img_root = os.path.join(paths["game_dir"], "img")
+
     encrypted_count = 0
     for f in png_files:
         base_name = os.path.splitext(os.path.basename(f))[0]
         out_rpgmvp = os.path.join(dest_pictures, f"{base_name}.rpgmvp")
+
+        # ตรวจสอบค้นหาตำแหน่งโฟลเดอร์ต้นฉบับจริงในเกมอัตโนมัติ (เช่น pictures, system, titles1 ฯลฯ)
+        if not os.path.exists(out_rpgmvp) and os.path.exists(game_img_root):
+            for root_dir, _, files in os.walk(game_img_root):
+                if f"{base_name}.rpgmvp" in files:
+                    out_rpgmvp = os.path.join(root_dir, f"{base_name}.rpgmvp")
+                    break
 
         # สำรองไฟล์เดิมไว้ก่อนเสมอ
         if os.path.exists(out_rpgmvp) and not os.path.exists(f"{out_rpgmvp}.bak_orig"):
@@ -1879,7 +1890,8 @@ def run_encrypt(rendered_dir: Optional[str] = None, target_dir: Optional[str] = 
         ok = RPGMImageCrypto.encrypt_file(f, out_rpgmvp, key)
         if ok:
             encrypted_count += 1
-            print(f"  💉 Injected into game: {os.path.basename(out_rpgmvp)}")
+            rel_path = os.path.relpath(out_rpgmvp, paths["game_dir"])
+            print(f"  💉 Injected into game: {rel_path}")
 
     print(f"\n🎉 ALL {encrypted_count:,} IMAGES ENCRYPTED & INJECTED INTO GAME SUCCESSFULLY 100%!")
 

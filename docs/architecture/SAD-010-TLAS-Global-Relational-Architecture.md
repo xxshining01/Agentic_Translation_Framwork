@@ -1,22 +1,29 @@
 # Software Architecture Document (SAD)
 
-**หมายเลขเอกสาร:** SAD-010  
-**ชื่อระบบ:** TLAS Global-Relational Localization Architecture (v4.0)  
+**หมายเลขเอกสาร:** SAD-010 (v4.1 Calibrated)  
+**ชื่อระบบ:** TLAS Global-Relational Localization Architecture (Decoupled & Zero-Fallback Standard)  
 **สถานะ:** Approved Architecture  
-**วันที่:** 2026-09-13  
-**เอกสารอ้างอิง:** ADR-015, SDD-005, SDD-010, SDD-011  
+**วันที่:** 2026-11-01  
+**เอกสารอ้างอิง:** ADR-015, ADR-025, ADR-035, SDD-005, SDD-010, SDD-011  
 
 ---
 
 ## 1. บทนำและวิสัยทัศน์ของระบบ (System Overview & Architectural Vision)
 
-สถาปัตยกรรม **TLAS v4.0 (Global-Relational Architecture)** ถูกออกแบบขึ้นเพื่อแก้ปัญหาความซับซ้อนของการจัดเรียงลำดับเวลา (Timeline Ordering) ในสคริปต์เกมที่มีความไม่เป็นเส้นตรง (Non-linear Narrative) โดยเปลี่ยนจากการพึ่งพา Timeline States มาเป็นการใช้ **Statistical Consensus บนพารามิเตอร์เชิงนามธรรมระดับทั้งโปรเจกต์ (Project-wide Abstract Parameter Consensus)** ควบคู่กับ **การแมปสรรพนามแบบจำเพาะคู่ความสัมพันธ์ (Directed Pairwise Pronoun Resolution)**
+สถาปัตยกรรม **TLAS v4.1 (Decoupled Global-Relational Architecture)** ถูกปรับปรุงขึ้นเพื่อแก้ปัญหาความสับสนระหว่างฐานข้อมูลคำศัพท์ (Glossary) และโปรไฟล์ตัวละคร (Character Profiles) รวมถึงกำจัดกับดักการเดาสรรพนามอัตโนมัติ (Default Polite Male Trap) ที่สร้างความเสียหายให้กับงานแปล โดยยึดหลักการแยกชั้นข้อมูลอย่างเด็ดขาด (Decoupled Layering):
 
 ### แกนหลักของสถาปัตยกรรม (Core Architectural Pillars)
-1. **Zero Timeline Dependency:** ไม่มีการเรียงลำดับเวลาของเหตุการณ์ และไม่มี `timeline_states` ในโปรไฟล์ตัวละคร
-2. **Abstract Feature Extraction Only:** ในช่วงการวิเคราะห์ (Analysis Phase) LLM ทำหน้าที่สกัดเฉพาะ Taxonomy Tags และ Weights เท่านั้น **ห้ามส่งคำสรรพนามภาษาไทยกลับมาเด็ดขาด**
-3. **Macro-Level Parameter Consensus:** รวมผลลัพธ์พารามิเตอร์จากทุก Chunk ของโปรเจกต์ แล้วหาค่าเฉลี่ยทางสถิติ (Majority Vote / Weighted Mode) ในภาษา Python
-4. **Deterministic Taxonomy Mapping:** แปลงค่าเฉลี่ยของพารามิเตอร์ไปเป็นคำสรรพนามบุรุษที่ 1, 2, 3 และคำลงท้าย ผ่านกฎเกณฑ์ที่ชัดเจนใน Python ก่อนเริ่มขั้นตอนแปลจริง
+1. **Decoupled Glossary vs. Profiles (ADR-035):**
+   - **Layer 1: Master Glossary (`tlas_glossary.json`):** เก็บรวบรวมชื่อทั้งหมดใน Speaker Tags ของทั้งเกม 100% เพื่อล็อกคำแปล 1:1 ป้องกันการทับศัพท์ผิด
+   - **Layer 2: Character Profiles (`profiles/<Name>.json`):** สังเคราะห์เฉพาะ **ตัวละครสำคัญแท้จริง (Core/Main Cast ~30-50 ตัวละคร)** ที่มีบทบาทขับเคลื่อนเนื้อเรื่อง ตัวประกอบทั่วไป (Ambient NPCs) ต้องไม่มีไฟล์ Profile เด็ดขาด
+2. **Zero Fallback & Anti-Politeness Bias (Zero-Hardcode Invariant):**
+   - ห้ามเดาหรือ Fallback ตัวละครที่ไม่ทราบนิสัยให้กลายเป็น "ชายสุภาพ (ผม/คุณ/ครับ)" โดยเด็ดขาด
+   - หากตัวละครสำคัญใดไม่ทราบเพศแน่ชัด ให้ใช้ Neutral Speech Register (`ฉัน/เธอ/นาย`) ไร้หางเสียงจนกว่าจะมีหลักฐานยืนยัน
+3. **Clean Passthrough Runtime:** ในขั้นตอนการแปล หากตัวละครใดไม่มี Profile ระบบจะส่งเฉพาะชื่อที่ล็อกตาม Glossary + บริบทฉาก โดยปล่อยให้ AI แปลน้ำเสียงตามธรรมชาติ ไม่ส่ง Profile กลวงไปหลอก AI
+4. **Persistent Invariant Prompting:** ทุกๆ พร็อมพ์ที่ส่งไปแปล (รวม Follow-up) ต้องมี Mini-System Invariant กำกับความยาวบรรทัด (~40-48 ตัวอักษร) และคงสภาพ Tag 100%
+5. **Macro-Level Parameter Consensus:** รวมผลลัพธ์พารามิเตอร์เฉพาะตัวละครสำคัญจากทุก Chunk แล้วหาค่าเฉลี่ยทางสถิติ (Majority Vote / Weighted Mode) ใน Python
+6. **Deterministic Taxonomy Mapping:** แปลงค่าเฉลี่ยของพารามิเตอร์ไปเป็นคำสรรพนามบุรุษที่ 1, 2, 3 และคำลงท้าย ผ่านกฎเกณฑ์ที่ชัดเจนใน Python ก่อนเริ่มขั้นตอนแปลจริง
+
 
 ---
 

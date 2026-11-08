@@ -47,45 +47,23 @@ graph LR
 
 ```text
 Agentic Translation Framework (ATF)/
-├── .agents/                 # AI Agent Skills & System Directives
-│   └── skills/
-│       └── atf-master-pipeline/   # คู่มือปฏิบัติการของ Agent
+├── .agents/                 # AI Agent Skills, Rules & Project Memories
+├── archive/                 # โฟลเดอร์เก็บโค้ดยุคเก่าและสคริปต์เฉพาะกิจ (Safely Archived)
+│   ├── legacy_agents/       # โค้ดยุคแรก (Early Multi-Agent / Gemma Prototype)
+│   ├── legacy_tools/        # สคริปต์ซ่อมและสคริปต์วิเคราะห์ย่อยในอดีต 65+ รายการ
+│   └── root_scripts/        # สคริปต์เทสต์ชั่วคราวและตัวรันเก่าใน Root
 ├── data/                    # โฟลเดอร์ฐานข้อมูลและเทมเพลต
-│   ├── images/              # โฟลเดอร์จัดการแปลภาพกราฟิก (Image Localization)
-│   │   ├── raw/             # ภาพต้นฉบับ .png ที่สแกนพบ Text
-│   │   ├── translated/      # ภาพภาษาไทยที่แต่งเสร็จจาก Photoshop
-│   │   ├── unique_dialogues.csv # ตารางรวมข้อความซ้ำ แปลรอบเดียว
-│   │   └── image_dialogues.csv  # ตารางแคตตาล็อกระบุภาพและข้อความทั้งหมด
-│   ├── project_manifest.template.json  # เทมเพลต Manifest ของโปรเจกต์
-│   ├── plugins_texts.template.csv      # เทมเพลต CSV ข้อความ UI เมนู
-│   └── tlas/
-│       ├── taxonomy.json                  # สารบัญกฎเกณฑ์ 4D Matrix สากล
-│       ├── character_profile_template.json # เทมเพลตโปรไฟล์ตัวละคร
-│       ├── tlas_glossary.template.json    # เทมเพลต Master Glossary 5 หมวด
-│       ├── global_pronoun_matrix.template.json # เทมเพลตเมทริกซ์สรรพนาม
-│       ├── alias_mapping.template.json    # เทมเพลตจับคู่ชื่อเรียกตัวละคร
-│       └── profiles/                      # โฟลเดอร์เก็บโปรไฟล์ตัวละคร
-├── docs/                    # สถาปัตยกรรมและเอกสารอ้างอิง (ADR / SAD / SDD)
-├── prompts/                 # Universal Translation Prompts
+│   ├── project_manifest.json# ไฟล์กำหนดตำแหน่งโฟลเดอร์เกมและเส้นทางไฟล์ของโปรเจกต์
+│   ├── plugins_texts.csv    # ตารางแปลข้อความ UI เมนูจาก plugins.js
+│   └── tlas/                # ฐานข้อมูล Master Glossary, Profiles และ Pronoun Matrix
+├── docs/                    # สถาปัตยกรรมและคู่มือการใช้งาน (ADR / SAD / SDD / USER_MANUAL.md)
 ├── src/
 │   └── atf/
-│       ├── agents/          # Agent รันไทม์ (Translator, QA, Summarizer, Analyzer)
-│       ├── core/            # เครื่องมือหลัก (Masker, Splitter, Auditor, Glossary)
-│       ├── memory/          # Context Engine ค้นหาบริบทฉาก
-│       ├── parsers/         # ตัวอ่านไฟล์เกม (CSV, Ren'Py, RPG Maker)
-│       └── tools/           # สคริปต์ปฏิบัติการทั้งหมด (Bridge, Profiler, Runner, Image Localizer)
+│       ├── core/            # โมดูลระบบหลัก (DisplayableEngine, Masker, Splitter, LQA, Scanner)
+│       └── tools/           # เครื่องมือปฏิบัติการหลัก (Bridge Server, Translation Runner, Triad Engine)
 ├── requirements.txt         # รายการแพ็กเกจ Python ที่จำเป็น
-├── setup_paths.py           # สคริปต์ตั้งค่าตำแหน่งไฟล์ของโปรเจกต์
-├── trace_scenes.py          # สคริปต์สกัดฉากเนื้อเรื่อง
-├── extract_glossary.py      # สคริปต์สกัดคำศัพท์ไอเทม/สถานที่ใหม่
-├── harvest_places.py        # สคริปต์ค้นหาชื่อสถานที่จากบทสนทนา
-├── import_glossary.py       # สคริปต์นำเข้าคำศัพท์สู่ Glossary
-├── extract_plugins.py       # สคริปต์สกัดข้อความ UI เมนูจาก plugins.js
-├── inject_plugins.py        # สคริปต์ฉีดคำแปลกลับเข้า plugins.js
-├── localize_images.py       # สคริปต์หลักจัดการแปลภาพกราฟิก (Scan, Catalog, Dedupe, Encrypt)
-├── sync_checkpoint.py       # สคริปต์ซิงค์คำแปลจาก Checkpoint ลง CSV
-├── verify_integrity.py      # สคริปต์ตรวจสอบความสมบูรณ์ของระบบ
-└── translate.py             # สคริปต์หลักสั่งเริ่มกระบวนการแปล
+├── atf.py                   # Master Unified CLI สั่งการทำงานครบวงจรในคำสั่งเดียว
+└── translate.py             # ทางลัดสำหรับสั่งรันการแปล (Shortcut to `python atf.py translate`)
 ```
 
 ---
@@ -137,67 +115,71 @@ pip install -r requirements.txt
 
 ---
 
-## 🧭 คู่มือการใช้งาน Pipeline (User Manual & Workflow)
+## 🧭 คู่มือการใช้งานระบบ (User Manual & Execution Workflow)
 
-ATF รองรับการทำงาน 2 รูปแบบหลัก:
-- **Case A: New Game Clean Slate** — แปลเกมใหม่แกะกล่องตั้งแต่ศูนย์
-- **Case B: Patch Version Update** — อัปเดตแพตช์เกมเดิมที่มีบทแปลอยู่แล้ว
-
----
-
-### ขั้นตอนเตรียมความพร้อม (Phase 0: Setup & Bridge)
-
-#### 1. เปิด Bridge Server (รันแยกไว้ 1 Terminal เสมอ)
-- **PowerShell / CMD:**
-  ```bash
-  python src/atf/tools/chatgpt_bridge_server.py
-  ```
-  *(เมื่อเชื่อมต่อกับหน้าเว็บ ChatGPT สำเร็จ คอนโซลจะแสดงสถานะว่า Userscript เชื่อมต่อแล้ว)*
-
-#### 2. กำหนดค่าโปรเจกต์ผ่าน Manifest
-สร้างไฟล์ `data/project_manifest.json` จาก `data/project_manifest.template.json` หรือรันสคริปต์ตั้งค่าแบบโต้ตอบ:
-- **PowerShell / CMD:**
-  ```bash
-  python setup_paths.py
-  ```
+> 💡 **คู่มือฉบับสมบูรณ์อย่างเป็นทางการ (Official Complete Manual):**  
+> ตรวจสอบเอกสารฉบับเต็มที่แยกส่วนคำสั่งและการทำงานเชิงลึกอย่างละเอียดได้ที่ 👉 **[[คู่มือการใช้งานระบบ ATF (docs/USER_MANUAL.md)]](file:///d:/Agentic%20Translation%20Framework%20(ATF)%20Project/docs/USER_MANUAL.md)**
+> - **หมวดที่ 1:** ส่วนการสั่งทำงานด่วน (Operational Cheatsheet: ตารางคำสั่งพร้อมรันทั้ง PowerShell และ CMD)
+> - **หมวดที่ 2:** ส่วนอธิบายรายละเอียดเชิงลึก (System Mechanics & Architecture: ADR-035, SFX, 5D LQA)
 
 ---
 
-### 🟢 CASE A: แปลเกมใหม่ตั้งแต่ศูนย์ (New Game Clean Slate)
+### ⚡ สรุปลำดับการสั่งทำงานด่วน (Quick Start Pipeline)
 
-#### Stage A1: สกัดข้อความบทสนทนาและ UI เมนู
-1. สกัดข้อความ UI เมนูจาก `plugins.js`:
-   ```bash
-   python extract_plugins.py
-   ```
-2. ผลลัพธ์จะได้ไฟล์ตาราง 8 คอลัมน์มาตรฐาน ATF ใน `data/plugins_texts.csv`
-
-#### Stage A2: เก็บเกี่ยวคำศัพท์ (Glossary Calibration)
-1. สกัดชื่อสถานที่ที่ปรากฏในบทสนทนาจริง:
-   ```bash
-   python harvest_places.py
-   ```
-2. มนุษย์ตรวจทานและแปลคำศัพท์ในตาราง $\to$ อัปเดตลง `data/tlas/tlas_glossary.json`
-
-#### Stage A3: จำลองขอบเขตฉากเนื้อเรื่อง (Scene Tracing)
-จำลอง Event Flow ของเกมเพื่อรวมบทสนทนาเป็นฉากที่ต่อเนื่องกัน:
-```bash
-python trace_scenes.py
+```mermaid
+flowchart LR
+    S1["1. python atf.py setup<br>(ตั้งค่า Workspace)"] --> S2["2. python atf.py bridge<br>(เชื่อมต่อ ChatGPT)"]
+    S2 --> S3["3. python atf.py prepare-all<br>(เตรียมข้อมูลครบวงจร)"]
+    S3 --> S4["4. python atf.py translate<br>(สั่งรันการแปลต่อเนื่อง)"]
+    S4 --> S5["5. python atf.py verify<br>(ตรวจ LQA 8 มิติ)"]
+    S5 --> S6["6. python atf.py export<br>(ส่งออกแพตช์เกม)"]
+    
+    style S1 fill:#f6f8fa,stroke:#0969da
+    style S2 fill:#f6f8fa,stroke:#0969da
+    style S3 fill:#ddf4ff,stroke:#0969da,stroke-width:2px
+    style S4 fill:#ddf4ff,stroke:#0969da,stroke-width:2px
+    style S5 fill:#f6f8fa,stroke:#0969da
+    style S6 fill:#f6f8fa,stroke:#0969da
 ```
-ผลลัพธ์: จะได้โครงข่ายฉากเนื้อเรื่องใน `rpgm_scenes_v5.json`
 
-#### Stage A4: วิเคราะห์ 4D TLAS & สร้างโปรไฟล์ตัวละคร
+#### ขั้นตอนที่ 1: ตั้งค่า Workspace และตำแหน่งไฟล์เกม:
 ```bash
-# 1. สกัด Macro Features ของแต่ละฉาก
-python src/atf/tools/tlas_analyzer_v4.py
-
-# 2. สังเคราะห์โปรไฟล์และเมทริกซ์สรรพนาม
-python src/atf/tools/tlas_consensus_engine.py
+python atf.py setup
 ```
-ผลลัพธ์: จะได้ไฟล์โปรไฟล์ใน `data/tlas/profiles/{Character}.json` และ `global_pronoun_matrix.json`
 
-#### Stage A5: สั่งรันการแปลผ่าน Web Bridge
+#### ขั้นตอนที่ 2: เปิดสะพานเชื่อมต่อ ChatGPT Web Bridge (เปิดหน้าต่าง Terminal แยก):
 ```bash
+python atf.py bridge
+```
+
+#### ขั้นตอนที่ 3: สั่งเตรียมข้อมูลทั้งเกมครบวงจรในคำสั่งเดียว (สแกนชื่อ, ศัพท์, ฉาก, เมทริกซ์, สร้างตาราง 10 คอลัมน์):
+```bash
+python atf.py prepare-all
+```
+
+#### ขั้นตอนที่ 4: สั่งรันการแปลเกม:
+- **โหมดจำลองออฟไลน์ (Dry-Run ทดสอบระบบ):**
+  ```bash
+  python atf.py translate --dry-run
+  ```
+- **โหมดรันแปลจริงต่อเนื่องทั้งเรื่อง:**
+  ```bash
+  python atf.py translate
+  ```
+
+#### ขั้นตอนที่ 5: ตรวจสอบความถูกต้องและคุณภาพ LQA 8 มิติ:
+```bash
+python atf.py verify
+```
+
+#### ขั้นตอนที่ 6: ฉีดคำแปล UI เมนู และส่งออกไฟล์แพตช์เกม:
+```bash
+# ฉีดคำแปลเมนูเข้า www/js/plugins.js
+python atf.py plugins --inject
+
+# ส่งออกไฟล์ CSV สำหรับนำไปแพตช์เกม
+python atf.py export
+```
 # แปลข้อความ UI เมนูก่อน
 python translate.py --plugins
 

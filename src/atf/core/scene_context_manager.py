@@ -246,6 +246,9 @@ class SceneContextManager:
         ดึงข้อมูลบริบทของฉาก (Scene Context Prompt Block) โดยตรงจาก Scene ID
         """
         try:
+            if not scene_id or not isinstance(scene_id, str):
+                return ""
+
             # กรณีตัวเลือกเมนูระบบ / UI Action Commands
             if scene_id == "System_Menu_Choices":
                 return (
@@ -404,7 +407,7 @@ class SceneContextManager:
         - ประโยคที่มีคำแปลไทยอยู่แล้ว จะแสดงคำแปลในวงเล็บ (Thai: ...) เพื่อให้ AI ซึมซับสำนวน
         - ไฮไลต์ประโยคเป้าหมายที่ต้องแปลด้วยเครื่องหมาย --> [TARGET #{id}]
         """
-        if not target_row_indices or scene_id == "System_Menu_Choices" or scene_id.endswith("_Database"):
+        if not target_row_indices or not scene_id or not isinstance(scene_id, str) or scene_id == "System_Menu_Choices" or scene_id.endswith("_Database"):
             return ""
 
         flow_lines = []

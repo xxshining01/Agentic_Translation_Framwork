@@ -92,18 +92,36 @@ def export_patch(source_processed_csv: str, target_raw_csv: str):
     print(f"  • Output file updated: {target_raw_csv}")
     print("\n🎉 PATCH DEPLOYMENT READY FOR TRANSLATOR++ / IN-GAME BUILD!")
 
+WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+MANIFEST_PATH = os.path.join(WORKSPACE_ROOT, "data", "project_manifest.json")
+
+
+def load_manifest():
+    if os.path.exists(MANIFEST_PATH):
+        try:
+            with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[!] Warning reading manifest: {e}")
+    return {}
+
+
 def main():
+    manifest = load_manifest()
+    default_source = manifest.get("output_enriched_csv") or manifest.get("output_translated_csv") or ""
+    default_target = manifest.get("raw_pre_csv") or ""
+
     parser = argparse.ArgumentParser(description="Export Final Game Patch CSV")
     parser.add_argument(
         "--source",
         type=str,
-        default=r"E:\SummerStolenV035_PUBLIC_patch\New folder\processed_dialogues_v3_repaired.csv",
+        default=default_source,
         help="Path to source processed & repaired CSV"
     )
     parser.add_argument(
         "--target",
         type=str,
-        default=r"E:\SummerStolenV035_PUBLIC_patch\SummerStolenV035_PUBLIC - SummerStolenV035_PUBLIC.csv",
+        default=default_target,
         help="Path to target raw pre-patch CSV"
     )
     args = parser.parse_args()

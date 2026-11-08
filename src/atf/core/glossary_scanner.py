@@ -13,16 +13,19 @@ from typing import Dict, List, Any, Optional
 logger = logging.getLogger("GlossaryScanner")
 
 class GlossaryScanner:
-    def __init__(self, glossary_path: Optional[str] = None, profiles_dir: Optional[str] = None):
+    def __init__(self, glossary_path: Optional[str] = None, profiles_dir: Optional[str] = None, matrix_path: Optional[str] = None):
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
         
         if glossary_path is None:
             glossary_path = os.path.join(base_dir, "data", "tlas", "tlas_glossary.json")
         if profiles_dir is None:
             profiles_dir = os.path.join(base_dir, "data", "tlas", "profiles")
+        if matrix_path is None:
+            matrix_path = os.path.join(base_dir, "data", "tlas", "global_pronoun_matrix.json")
             
         self.glossary_path = glossary_path
         self.profiles_dir = profiles_dir
+        self.matrix_path = matrix_path
         
         self.glossary_data: Dict[str, Any] = {}
         self.characters: Dict[str, Any] = {}
@@ -31,6 +34,10 @@ class GlossaryScanner:
         self.skills: Dict[str, Any] = {}
         self.system_ui: Dict[str, Any] = {}
         self.curated_profiles: Dict[str, Any] = {}
+        self.global_pronoun_matrix: List[Dict[str, Any]] = []
+        self.specific_pair_rules: List[Dict[str, Any]] = []
+        self.demographic_rules: List[Dict[str, Any]] = []
+        self._profile_cache: Dict[str, Any] = {}
         
         # Regex map สำหรับการสแกนแบบ Whole-word case-insensitive
         self._compiled_regexes: Dict[str, List[tuple]] = {
@@ -109,6 +116,25 @@ class GlossaryScanner:
         self.skills = self.glossary_data.get("Skills", {})
         self.system_ui = self.glossary_data.get("System_UI", {})
 
+        # โหลด Global Pronoun Matrix สากล (ถ้ามี)
+        self.specific_pair_rules = []
+        self.demographic_rules = []
+        if self.matrix_path and os.path.exists(self.matrix_path):
+            try:
+                with open(self.matrix_path, "r", encoding="utf-8") as mf:
+                    raw_matrix = json.load(mf)
+                if isinstance(raw_matrix, dict):
+                    self.specific_pair_rules = raw_matrix.get("specific_pair_rules", [])
+                    self.demographic_rules = raw_matrix.get("demographic_rules", [])
+                    self.global_pronoun_matrix = self.specific_pair_rules
+                elif isinstance(raw_matrix, list):
+                    self.specific_pair_rules = raw_matrix
+                    self.demographic_rules = []
+                    self.global_pronoun_matrix = raw_matrix
+                logger.info(f"Loaded {len(self.specific_pair_rules)} specific pairwise rules & {len(self.demographic_rules)} demographic rules from pronoun matrix.")
+            except Exception as e:
+                logger.warning(f"Could not load global pronoun matrix: {e}")
+
         self._compile_patterns()
         logger.info(
             f"GlossaryScanner ready: {len(self.characters)} Characters, "
@@ -166,10 +192,11 @@ class GlossaryScanner:
     def _create_word_regex(self, term: str) -> re.Pattern:
         """สร้าง Regex เพื่อจับคำแบบ Whole Word (รองรับเครื่องหมายพิเศษ เช่น 's หรือ +)"""
         escaped = re.escape(term)
-        # ถ้าขึ้นต้นด้วยตัวอักษร ให้มี word boundary นำหน้า
-        prefix = r'\b' if re.match(r'^\w', term) else ''
-        suffix = r'\b' if re.match(r'.*\w$', term) else ''
-        return re.compile(f"{prefix}{escaped}{suffix}", re.IGNORECASE)
+        # ถ้าเป็นคำภาษาอังกฤษ/ตัวเลข ให้ใช้ word boundary \b
+        # แต่ถ้าเป็นภาษาญี่ปุ่น/CJK ห้ามใช้ \b เพราะในภาษาญี่ปุ่นไม่มีช่องว่างคำ (เช่น 遠藤さん)
+        if re.match(r'^[A-Za-z0-9_]+$', term):
+            return re.compile(rf'\b{escaped}\b', re.IGNORECASE)
+        return re.compile(escaped, re.IGNORECASE)
 
     def scan_text(self, text: str) -> Dict[str, Dict[str, Any]]:
         """สแกนข้อความเดียวแล้วส่งคืนคำศัพท์ที่พบแยกตามหมวดหมู่"""
@@ -226,11 +253,105 @@ class GlossaryScanner:
 
         return matched
 
+    def get_profile(self, name: str) -> Optional[Dict[str, Any]]:
+        """โหลดและ Cache ข้อมูล Character Profile จาก data/tlas/profiles/{name}.json"""
+        if name in self._profile_cache:
+            return self._profile_cache[name]
+
+        pdata = None
+        if self.profiles_dir and os.path.exists(self.profiles_dir):
+            prof_file = os.path.join(self.profiles_dir, f"{name}.json")
+            if not os.path.exists(prof_file):
+                for fname in os.listdir(self.profiles_dir):
+                    if fname.lower() == f"{name.lower()}.json":
+                        prof_file = os.path.join(self.profiles_dir, fname)
+                        break
+
+            if os.path.exists(prof_file):
+                try:
+                    with open(prof_file, "r", encoding="utf-8") as pf:
+                        pdata = json.load(pf)
+                except Exception:
+                    pass
+
+        self._profile_cache[name] = pdata
+        return pdata
+
+    def _infer_persona(self, pdata: Dict[str, Any]) -> str:
+        """วิเคราะห์ Persona Category (THUG_VULGAR, CALM_POLITE, CHARMING_MANIPULATIVE, ELDER_AFFECTIONATE, CHILD_POLITE)"""
+        if not pdata:
+            return "CALM_POLITE"
+        if "demographic_persona" in pdata:
+            return pdata["demographic_persona"]
+
+        ident = pdata.get("identity", {})
+        age = ident.get("age", "").upper()
+        if age == "CHILD":
+            return "CHILD_POLITE"
+        if age == "ELDER":
+            return "ELDER_AFFECTIONATE"
+
+        bs = pdata.get("base_state", {})
+        per_tags = [x.get("tag", "") for x in bs.get("personality", [])]
+        hab_tags = [x.get("tag", "") for x in bs.get("speech_habit", [])]
+        all_tags = set(per_tags + hab_tags)
+
+        if any(t in all_tags for t in ["PER_SOC_VULGAR", "PER_SOC_ARROGANT", "PER_SOC_PEEPING", "SPR_SLANG", "SPR_BLUNT"]):
+            return "THUG_VULGAR"
+        if any(t in all_tags for t in ["PER_SOC_CHARMING", "PER_MIND_MANIPULATIVE", "SPR_SMOOTH_TALK"]):
+            return "CHARMING_MANIPULATIVE"
+
+        return "CALM_POLITE"
+
+    def _match_demographic_rule(self, speaker_persona: str, target_pdata: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """จับคู่ Demographic Identity (Gender, Age, Number) กับ speaker_persona ใน demographic_rules"""
+        if not self.demographic_rules:
+            return None
+
+        if not target_pdata:
+            for rule in self.demographic_rules:
+                if rule.get("speaker_persona") == speaker_persona and rule.get("listener_match", {}).get("age") == "ADULT":
+                    return rule.get("speech_style", {})
+            return None
+
+        t_ident = target_pdata.get("identity", {})
+        t_gender = t_ident.get("gender", "UNKNOWN").upper()
+        t_age = t_ident.get("age", "ADULT").upper()
+        t_num = t_ident.get("number", "SINGULAR").upper()
+
+        # 1. เช็กกรณีผู้ฟังเป็นพหูพจน์ (PLURAL)
+        if t_num == "PLURAL":
+            for rule in self.demographic_rules:
+                if rule.get("speaker_persona") == speaker_persona:
+                    m = rule.get("listener_match", {})
+                    if m.get("number") == "PLURAL":
+                        return rule.get("speech_style", {})
+
+        # 2. เช็กคู่เพศและช่วงวัยตรงกัน (Gender + Age)
+        for rule in self.demographic_rules:
+            if rule.get("speaker_persona") == speaker_persona:
+                m = rule.get("listener_match", {})
+                if m.get("number", "SINGULAR") == t_num:
+                    if m.get("gender") == t_gender and m.get("age") == t_age:
+                        return rule.get("speech_style", {})
+
+        # 3. เช็กช่วงวัย (Age Only)
+        for rule in self.demographic_rules:
+            if rule.get("speaker_persona") == speaker_persona:
+                m = rule.get("listener_match", {})
+                if m.get("number", "SINGULAR") == t_num:
+                    if "age" in m and "gender" not in m and m["age"] == t_age:
+                        return rule.get("speech_style", {})
+
+        return None
+
     def _enrich_character_info(self, name: str, char_data: Dict[str, Any], context_characters: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         ดึงและประกอบข้อมูล Character Profile อย่างสมบูรณ์:
-        - สรรพนาม (แทนตัวเอง, เรียกคู่สนทนา, บุรุษที่ 3), คำลงท้าย, เพศ, บทบาท, บุคลิก
-        - ความสัมพันธ์เฉพาะคู่ (Pairwise Relationship Dynamics) กับ Listener หรือคนที่ถูกเอ่ยถึงใน Batch
+        - สรรพนามพื้นฐาน: แสดงเฉพาะแทนตัวเองและคำลงท้าย (ไม่ยัดเยียด target_pronoun ลงใน base)
+        - ความสัมพันธ์เฉพาะคู่ (Pairwise Relationship Dynamics) กับ Listener หรือคนที่อยู่ในฉาก:
+          1. จับคู่จาก Specific Rules / relationships ก่อน
+          2. หากไม่มี ให้ Match จาก Identity Demographic Matrix (Gender, Age, Number) อัตโนมัติ
         """
         if context_characters is None:
             context_characters = []
@@ -253,21 +374,7 @@ class GlossaryScanner:
         }
 
         # 1. ดึงจาก data/tlas/profiles/{name}.json
-        pdata = None
-        if self.profiles_dir and os.path.exists(self.profiles_dir):
-            prof_file = os.path.join(self.profiles_dir, f"{name}.json")
-            if not os.path.exists(prof_file):
-                for fname in os.listdir(self.profiles_dir):
-                    if fname.lower() == f"{name.lower()}.json":
-                        prof_file = os.path.join(self.profiles_dir, fname)
-                        break
-
-            if os.path.exists(prof_file):
-                try:
-                    with open(prof_file, "r", encoding="utf-8") as pf:
-                        pdata = json.load(pf)
-                except Exception:
-                    pass
+        pdata = self.get_profile(name)
 
         if pdata:
             ident = pdata.get("identity", {})
@@ -280,11 +387,31 @@ class GlossaryScanner:
 
             bss = pdata.get("base_speech_style", {})
             info["self_pronoun"] = bss.get("self_pronoun", "")
+            # target_pronoun และ third_person_pronoun ใน base_speech_style จะถูกเว้นว่างไว้เพื่อป้องกัน Model Drift
             info["target_pronoun"] = bss.get("target_pronoun", "")
             info["third_person_pronoun"] = bss.get("third_person_pronoun", "")
             info["ending_particle"] = bss.get("ending_particle", "")
 
-            # ตรวจสอบความสัมพันธ์เฉพาะคู่กับ context_characters
+            speaker_persona = self._infer_persona(pdata)
+
+            # ตรวจสอบความสัมพันธ์เฉพาะคู่กับ context_characters จาก Specific Pairwise Rules
+            if self.specific_pair_rules and context_characters:
+                for rule in self.specific_pair_rules:
+                    if rule.get("speaker") == name and rule.get("listener") in context_characters and rule.get("listener") != name:
+                        tgt_name = rule.get("listener")
+                        sp = rule.get("speech_style", {})
+                        if sp and not any(r["target"] == tgt_name for r in info["pair_rules"]):
+                            tgt_self = sp.get("self_pronoun") or info["self_pronoun"]
+                            tgt_target = sp.get("target_pronoun") or ""
+                            tgt_end = sp.get("ending_particle") or info["ending_particle"]
+                            info["pair_rules"].append({
+                                "target": tgt_name,
+                                "self_pronoun": tgt_self,
+                                "target_pronoun": tgt_target,
+                                "ending_particle": tgt_end
+                            })
+
+            # ตรวจสอบเพิ่มเติมจาก relationships ภายในตัว Profile เอง
             raw_rels = pdata.get("relationships", [])
             if not raw_rels and "base_state" in pdata:
                 raw_rels = pdata.get("base_state", {}).get("relationships", [])
@@ -292,17 +419,34 @@ class GlossaryScanner:
             for rel in raw_rels:
                 tgt_name = rel.get("target_name", "")
                 if tgt_name in context_characters and tgt_name != name:
-                    sp = rel.get("speech_style", {}) or rel.get("specific_speech", {})
-                    if sp:
-                        tgt_self = sp.get("self_pronoun") or info["self_pronoun"]
-                        tgt_target = sp.get("target_pronoun") or info["target_pronoun"]
-                        tgt_end = sp.get("ending_particle") or info["ending_particle"]
-                        info["pair_rules"].append({
-                            "target": tgt_name,
-                            "self_pronoun": tgt_self,
-                            "target_pronoun": tgt_target,
-                            "ending_particle": tgt_end
-                        })
+                    if not any(r["target"] == tgt_name for r in info["pair_rules"]):
+                        sp = rel.get("speech_style", {}) or rel.get("specific_speech", {})
+                        if sp:
+                            tgt_self = sp.get("self_pronoun") or info["self_pronoun"]
+                            tgt_target = sp.get("target_pronoun") or ""
+                            tgt_end = sp.get("ending_particle") or info["ending_particle"]
+                            info["pair_rules"].append({
+                                "target": tgt_name,
+                                "self_pronoun": tgt_self,
+                                "target_pronoun": tgt_target,
+                                "ending_particle": tgt_end
+                            })
+
+            # ตรวจสอบตัวละครคู่สนทนาที่ยังไม่มี Pair Rule: ทำ Dynamic Identity Demographic Resolution
+            if context_characters and self.demographic_rules:
+                for tgt_name in context_characters:
+                    if tgt_name != name and not any(r["target"] == tgt_name for r in info["pair_rules"]):
+                        tgt_pdata = self.get_profile(tgt_name)
+                        demo_style = self._match_demographic_rule(speaker_persona, tgt_pdata)
+                        if demo_style:
+                            tgt_target = demo_style.get("target_pronoun", "คุณ")
+                            tgt_end = demo_style.get("ending_particle") or info["ending_particle"]
+                            info["pair_rules"].append({
+                                "target": tgt_name,
+                                "self_pronoun": info["self_pronoun"],
+                                "target_pronoun": tgt_target,
+                                "ending_particle": tgt_end
+                            })
 
         # 2. ถ้าสรรพนามยังว่าง ให้เติมจาก Curated Profiles
         if not info["self_pronoun"] and info["pronoun_summary"] and info["pronoun_summary"] != "-":
@@ -313,49 +457,6 @@ class GlossaryScanner:
                 info["target_pronoun"] = p_parts[1].strip()
             if len(p_parts) >= 3 and p_parts[2].strip():
                 info["third_person_pronoun"] = p_parts[2].strip()
-
-        # คำลงท้ายเริ่มต้นถ้ายังว่าง
-        if not info["ending_particle"]:
-            if "ชาย" in info["gender"]:
-                info["ending_particle"] = "ครับ"
-            elif "หญิง" in info["gender"]:
-                info["ending_particle"] = "ค่ะ"
-
-        # เพิ่ม Curated Special Pair Dynamic สำหรับคู่สนทนาหลัก
-        if name == "Dan" and "Shion" in context_characters:
-            if not any(r["target"] == "Shion" for r in info["pair_rules"]):
-                info["pair_rules"].append({
-                    "target": "Shion",
-                    "self_pronoun": "ผม",
-                    "target_pronoun": "คุณ (หรือ เธอ)",
-                    "ending_particle": "ครับ"
-                })
-        elif name == "Shion" and "Dan" in context_characters:
-            if not any(r["target"] == "Dan" for r in info["pair_rules"]):
-                info["pair_rules"].append({
-                    "target": "Dan",
-                    "self_pronoun": "ฉัน",
-                    "target_pronoun": "คุณ",
-                    "ending_particle": "ค่ะ"
-                })
-        elif name == "Lily" and ("Dan" in context_characters or "Shion" in context_characters):
-            for tgt in ["Dan", "Shion"]:
-                if tgt in context_characters and not any(r["target"] == tgt for r in info["pair_rules"]):
-                    info["pair_rules"].append({
-                        "target": tgt,
-                        "self_pronoun": "หนู",
-                        "target_pronoun": f"พี่ {tgt}",
-                        "ending_particle": "ค่ะ / จ้ะ"
-                    })
-        elif name == "Lucas" and ("Dan" in context_characters or "Shion" in context_characters):
-            for tgt in ["Dan", "Shion"]:
-                if tgt in context_characters and not any(r["target"] == tgt for r in info["pair_rules"]):
-                    info["pair_rules"].append({
-                        "target": tgt,
-                        "self_pronoun": "ผม",
-                        "target_pronoun": f"พี่ {tgt}",
-                        "ending_particle": "ครับ"
-                    })
 
         return info
 
@@ -377,8 +478,7 @@ class GlossaryScanner:
         # 1. Character Names (MANDATORY 1:1 Name Translation - STRICT NO TRANSLITERATION)
         if chars:
             name_lines = [
-                "- **Character Names (MANDATORY 1:1 Name Translation - STRICT NO TRANSLITERATION)**:",
-                "  * ⚠️ CRITICAL MANDATORY RULE: If a character's mapped name is in English (e.g. `Lucy` -> **Lucy**, `Dan` -> **Dan**), you MUST preserve the exact English name (Latin letters) inside the Thai dialogue! NEVER transliterate or phonetically spell English-locked names in Thai (e.g. NEVER write 'ลูซี่', 'แดน', 'ชิออน')!"
+                "- **Character Names (MANDATORY 1:1 Name Translation - Use exact Thai spelling specified)**:"
             ]
             for name, cinfo in chars.items():
                 th_name = cinfo.get("th", name)
@@ -526,35 +626,52 @@ class GlossaryScanner:
     def translate_speaker_tag(self, prefix: str) -> str:
         """
         แปลงทั้งแท็ก Speaker รองรับทุกรูปแบบอย่างสมบูรณ์:
-        - '\\n<Dan:>' -> '\\n<Dan:>'
-        - '\\n<Mayor:>' -> '\\n<นายกเทศมนตรี:>'
-        - '<Mayor>' -> '<นายกเทศมนตรี>'
-        - '\\n<Masaru:> ' -> '\\n<Masaru:> '
-        - '\\n<\\C[0]Hikari:\\C>' -> '\\n<\\C[0]Hikari:\\C>'
-        - '\\n<\\C[27]Pink hair Woman\\C:>' -> '\\n<\\C[27]หญิงผมชมพู\\C:>'
-        - '\\n<\\C[18]\\fb???\\C\\fb:>' -> '\\n<\\C[18]\\fb???\\C\\fb:>'
+        - Angle Brackets: '\\n<Dan:>', '<Mayor>', '\\n<\\C[0]Hikari:\\C>'
+        - Lenticular Brackets: '【凛】', '【夫】\\n', '\\n【西原】'
+        - Square Brackets: '[Dan]', '\\n[凛]'
         """
         if not prefix:
             return ""
 
-        m = re.match(r"^(\s*\\n)?<([^>]+)>(\s*)", prefix)
-        if not m:
+        # 1. Lenticular Brackets: 【...】
+        m_len = re.match(r"^(\s*\\n|\s*\n)?【([^】]+)】([\s\:\n]*)", prefix)
+        if m_len:
+            lead = m_len.group(1) or ""
+            inner = m_len.group(2)
+            trailing = m_len.group(3) or ""
+            clean_name = re.sub(r"\\[A-Za-z]+(?:\[\d+\])?", "", inner).replace(":", "").strip()
+            if clean_name:
+                spk_th = self.translate_speaker(clean_name)
+                new_inner = inner.replace(clean_name, spk_th)
+                return f"{lead}【{new_inner}】{trailing}"
             return prefix
 
-        lead = m.group(1) or ""
-        inner = m.group(2)
-        trailing = m.group(3) or ""
-
-        # สกัดชื่อผู้พูดโดยตัด control codes เช่น \C[27], \C, \fb, \fi และเครื่องหมายโคลอน
-        clean_name = re.sub(r"\\[A-Za-z]+(?:\[\d+\])?", "", inner).replace(":", "").strip()
-        if not clean_name:
+        # 2. Angle Brackets: <...>
+        m_ang = re.match(r"^(\s*\\n|\s*\n)?<([^>]+)>([\s\:\n]*)", prefix)
+        if m_ang:
+            lead = m_ang.group(1) or ""
+            inner = m_ang.group(2)
+            trailing = m_ang.group(3) or ""
+            clean_name = re.sub(r"\\[A-Za-z]+(?:\[\d+\])?", "", inner).replace(":", "").strip()
+            if clean_name:
+                spk_th = self.translate_speaker(clean_name)
+                new_inner = inner.replace(clean_name, spk_th)
+                return f"{lead}<{new_inner}>{trailing}"
             return prefix
 
-        # แปลชื่อผู้พูดตาม Glossary
-        spk_th = self.translate_speaker(clean_name)
+        # 3. Square Brackets: [...] (เมื่อไม่ใช่ RPG Maker control tags เช่น \\C[0], \\V[1])
+        m_sq = re.match(r"^(\s*\\n|\s*\n)?\[([^\]]+)\]([\s\:\n]*)", prefix)
+        if m_sq and not re.match(r"^\\[A-Za-z]+", prefix):
+            lead = m_sq.group(1) or ""
+            inner = m_sq.group(2)
+            trailing = m_sq.group(3) or ""
+            clean_name = re.sub(r"\\[A-Za-z]+(?:\[\d+\])?", "", inner).replace(":", "").strip()
+            if clean_name:
+                spk_th = self.translate_speaker(clean_name)
+                new_inner = inner.replace(clean_name, spk_th)
+                return f"{lead}[{new_inner}]{trailing}"
+            return prefix
 
-        # แทนที่ clean_name เดิมด้วย spk_th ใน inner content โดยรักษา control codes เดิมไว้ครบถ้วน
-        new_inner = inner.replace(clean_name, spk_th)
-        return f"{lead}<{new_inner}>{trailing}"
+        return prefix
 
 

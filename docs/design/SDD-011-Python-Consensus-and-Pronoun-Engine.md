@@ -38,6 +38,14 @@
 
 ---
 
+### 2.1 การคัดกรองตัวละครสำคัญและการตัดตัวประกอบ (Target Qualification Invariant - ADR-035)
+ระบบ Consensus Engine ต้องปฏิบัติตามกฎการแยกชั้นข้อมูล (Decoupled Layering):
+1. **Target Whitelist Only:** สังเคราะห์ไฟล์ Character Profile (`data/tlas/profiles/<Name>.json`) ให้กับ **ตัวละครสำคัญแท้จริง (Core/Main Cast ~30-50 ตัวละคร)** ที่ผ่านเกณฑ์ Narrative Impact เท่านั้น
+2. **Zero-Profile for Ambient NPCs:** ตัวประกอบทั่วไป (Ambient/Generic NPCs เช่น `Lucy`, `Bald Thug`, `Customer*`, `Hooker`) จะ **ต้องไม่มีไฟล์ Profile บนดิสก์เด็ดขาด** เพื่อป้องกันการยัดเยียดสรรพนามปลอมไปหลอกโมเดลแปล
+3. **Clean Passthrough:** ตัวประกอบจะคงอยู่เฉพาะใน Master Glossary (`tlas_glossary.json`) เพื่อล็อกคำแปลชื่อภาษาไทย 1:1 เท่านั้น
+
+---
+
 ## 3. ขั้นตอนที่ 1: การหาค่าเฉลี่ยทางสถิติ (Statistical Parameter Consensus)
 
 ### 3.1 การรวบรวม Personality, Habits, และ Values
@@ -60,16 +68,22 @@
 
 ## 4. ขั้นตอนที่ 2: การแมปสรรพนามตาม Taxonomy (Deterministic Pronoun Resolution)
 
-### 4.1 การกำหนด Base Speech Style
+### 4.1 การกำหนด Base Speech Style (Zero-Fallback & Anti-Polite Bias Standard)
 นำ Identity (เพศ, วัย) และ Core Traits มาประเมินเพื่อกำหนดสรรพนามพื้นฐาน:
+- **International Name & Gender Lexicon:** ก่อนประเมินเพศ ระบบต้องตรวจสอบชุด Lexicon สากล (เช่น `Lucy`, `Alice`, `Lily`, `Shion`, `Chisato` = FEMALE) เพื่อป้องกันการ Fallback ผิดเพศ
 - **Gender = MALE, Age = ADULT:**
   - สุภาพทั่วไป (`PER_SOC_POLITE`): `self` = "ผม", `target` = "คุณ", `third` = "เขา", `ending` = "ครับ", `formality` = 4
-  - ห้าว/ตรงไปตรงมา (`PER_SOC_RUDE` หรือ `SPR_DIRECT` + `formality` ต่ำ): `self` = "ฉัน" / "ข้า", `target` = "นาย" / "แก", `third` = "มัน", `ending` = "", `formality` = 2
+  - ห้าว/นักเลง/ตรงไปตรงมา (`PER_SOC_RUDE` หรือ `PER_VIBE_AGGRESSIVE` หรือคีย์เวิร์ด Thug/Punk): `self` = "ฉัน" / "ข้า", `target` = "นาย" / "แก", `third` = "มัน", `ending` = "", `formality` = 2
 - **Gender = FEMALE, Age = ADULT:**
   - สุภาพทั่วไป: `self` = "ฉัน", `target` = "คุณ", `third` = "เธอ", `ending` = "ค่ะ", `formality` = 4
   - วัยรุ่น/เป็นกันเอง: `self` = "ฉัน", `target` = "เธอ", `third` = "เขา", `ending` = "จ้ะ", `formality` = 3
 - **Age = CHILD / TEEN:**
   - หญิง: `self` = "หนู", `target` = "พี่/คุณ", `third` = "เขา/เธอ", `ending` = "ค่ะ", `formality` = 3
+  - ชาย: `self` = "ผม", `target` = "พี่/คุณ", `third` = "เขา", `ending` = "ครับ", `formality` = 3
+- **⚠️ กฎเหล็ก Zero-Fallback (ห้าม Default Polite Male):**
+  - หากตัวละครสำคัญใดไม่ทราบเพศหรือไม่มี Tag นิสัย **ห้าม Fallback เป็น "ผม/คุณ/ครับ (Level 4)" เด็ดขาด**
+  - ระบบต้อง Fallback เป็น **Neutral Register (`self`: "ฉัน", `target`: "เธอ/นาย", `third`: "เขา", `ending`: "", `formality`: 3)** เสมอ
+
 
 ### 4.2 การกำหนด Pairwise Speech Style (สรรพนามบุรุษที่ 1, 2, 3 รายบุคคล)
 คำนวณสรรพนามที่ $A$ ใช้กับ $B$ ตามลำดับชั้นของกฎ (5-Tier Calibrated Priority Rule Chain - อ้างอิง SDD-012):

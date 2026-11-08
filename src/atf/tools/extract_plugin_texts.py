@@ -125,18 +125,20 @@ class SemanticParameterClassifier:
     JAVASCRIPT_CODE_PATTERNS: List[str] = [
         r"Graphics\.", r"Window_Base\.", r"\.prototype\.",
         r"\bfunction\b", r"=>", r"[+\-*/]\s*\d+", r"===|!==|&&|\|\|",
-        r"^#[0-9a-fA-F]{3,8}$", r"^rgba?\(", r"^(?:true|false|auto|left|center|right|on|off)$"
+        r"^#[0-9a-fA-F]{3,8}$", r"^rgba?\(", r"^(?:true|false|auto|left|center|right|on|off|control|shift|alt|tab|enter|escape|space|relative|absolute)$"
     ]
 
     ALLOWED_KEY_KEYWORDS: List[str] = [
         "Text", "Title", "Name", "Command", "Format", "Label", "Message",
         "Prompt", "Read", "Cancel", "Close", "Word", "Period", "Option",
-        "morningPeriod", "dayPeriod", "eveningPeriod", "nightPeriod", "daysWeek", "months", "seasons"
+        "morningPeriod", "dayPeriod", "eveningPeriod", "nightPeriod", "daysWeek", "months", "seasons",
+        "anotherData", "anotherDataList", "mode"
     ]
 
     BLACK_KEY_PATTERNS: List[str] = [
         "iconname", "icon", "image", "skin", "font", "key", "position",
-        "lunatic mode", "eval", "code", "switch", "variable", "folder", "filename"
+        "lunatic mode", "eval", "code", "switch", "variable", "folder", "filename",
+        "キー", "タイプ", "座標"
     ]
 
     @classmethod
@@ -165,7 +167,7 @@ class SemanticParameterClassifier:
         # 4. Reject ตาม System Blacklist และ Black Keywords
         # ข้อยกเว้น: คีย์ 'name' ภายใต้ parameters เช่น daysWeek, periods, quests ให้ถือเป็น UI Text ที่ต้องแปล
         is_whitelisted_name_context = leaf_key == "name" and any(
-            w in path_str for w in ["daysweek", "morningperiod", "dayperiod", "eveningperiod", "nightperiod", "period", "quest"]
+            w in path_str for w in ["daysweek", "morningperiod", "dayperiod", "eveningperiod", "nightperiod", "period", "quest", "anotherdata", "anotherdatalist", "another"]
         )
         if leaf_key in cls.SYSTEM_KEYS_BLACKLIST and not is_whitelisted_name_context:
             return False, f"Key '{leaf_key}' is in system blacklist"

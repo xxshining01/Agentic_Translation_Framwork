@@ -140,3 +140,19 @@ data/tlas/timeline_chunks*/
 data/tlas/profiles/*
 !data/tlas/profiles/.gitkeep
 data/tlas/profiles_backup*/
+
+# Archival & Legacy Backups
+archive/
+example game export/
+data/legacy_english_game_profiles_backup/
+data/tlas_backup_clean_slate_20261101/
+data/project_manifest.summerstolen.bak
+data/project_manifest.*.bak
+
+# Game Specific Scanned Artifacts
+data/tlas/character_whitelist.json
+data/tlas/scanned_speakers.json
+data/tlas/scene_packets.json
+data/tlas/sfx_glossary.json
+!data/tlas/sfx_glossary.template.json
+
