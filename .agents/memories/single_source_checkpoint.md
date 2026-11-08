@@ -384,3 +384,14 @@
   - ยุบรวมและเขียนใหม่ `docs/USER_MANUAL.md` เป็นคู่มือแม่บทฉบับรวมศูนย์เพียงฉบับเดียว เรียงลำดับจากขั้นตอน 0 ถึง 6
   - ครอบคลุมตั้งแต่การตั้งค่า Workspace (`setup`), เชื่อมต่อ Web Bridge (`bridge`), เตรียมข้อมูลทั้งเกมในคำสั่งเดียว (`prepare-all`), สั่งแปล (`translate`), ตรวจ LQA 8 มิติ (`verify`), จนถึงการแพตช์เกม (`plugins --inject` และ `export`)
   - อัปเดตผังการทำงานและโครงสร้างไดเรกทอรีใน `README.md` ให้สอดคล้องกัน 100%
+
+---
+
+### Phase 26: Standalone Plugin UI Text Extractor for New Projects
+- [x] **Task 26.1: Standalone Multi-File Plugin Extractor (`extract_game_plugins.py`)**
+  - พัฒนาโปรแกรมสกัดข้อความ UI เมนูจากปลั๊กอินทุกตัวของเกม สำหรับสร้างไฟล์ `plugins_texts.csv` ก่อนเริ่มโปรเจกต์ใหม่
+  - ออกแบบระบบ Interactive: ถามหาโฟลเดอร์เกมต้นทาง -> ตรวจหา `/js` อัตโนมัติ (รองรับทั้ง `www/js` และ `js`) -> สแกน `plugins.js` (Nested Parameters) และ `plugins/*.js` (Code Literals & UI Commands) -> ถามหาพิกัดบันทึกไฟล์ปลายทาง (Default: `data/plugins_texts.csv`)
+  - คัดกรองรหัส JavaScript, ตัวแปร, และ Asset filenames ออก สกัดเฉพาะ Human-Readable UI Texts
+- [x] **Task 26.2: Workflow Synchronization with `atf.py setup`**
+  - บรรจุคำแนะนำขั้นตอนที่ 3.0 ลงใน `docs/USER_MANUAL.md` และ Command Cheat Sheet เพื่อให้ไฟล์ที่สกัดได้พร้อมต่อยอดเข้า `python atf.py setup` ได้ทันที
+

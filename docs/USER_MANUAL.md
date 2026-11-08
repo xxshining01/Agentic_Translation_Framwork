@@ -55,11 +55,29 @@ flowchart TD
 
 ## 3. ขั้นตอนที่ 1: ตั้งค่าพื้นที่ทำงานและโปรเจกต์ (Workspace & Manifest Setup)
 
+### 3.0 ขั้นตอนเตรียมไฟล์: สกัดข้อความ UI จากปลั๊กอิน (`extract_game_plugins.py`)
+> 💡 **สำหรับโปรเจกต์เกมใหม่ที่ยังไม่มีไฟล์ `plugins_texts.csv`:**  
+> คุณสามารถใช้เครื่องมือสกัดอิสระ (Standalone Extractor) เพื่อดึงข้อความเมนู UI จากทุกไฟล์ใน `/js` (`plugins.js` และ `plugins/*.js`) ออกมาเป็นไฟล์ตารางก่อนเริ่มโปรเจกต์:
+
+- **PowerShell / CMD:**
+  ```bash
+  python extract_game_plugins.py
+  ```
+- **ขั้นตอนการทำงานของโปรแกรม:**
+  1. โปรแกรมจะถามหาโฟลเดอร์เกมต้นทาง: ให้ระบุพาธหรือลากโฟลเดอร์เกมมาวางในเทอร์มินัล
+  2. ระบบจะตรวจหาโฟลเดอร์ `/js` อัตโนมัติ และสแกนสกัดข้อความภาษาธรรมชาติและคำสั่ง UI ออกจากปลั๊กอินทุกตัว
+  3. เมื่อสกัดเสร็จแล้ว ระบบจะถามหาตำแหน่งสำหรับวางไฟล์ `plugins_texts.csv` (กด Enter เพื่อบันทึกที่ `data/plugins_texts.csv`)
+
+---
+
+### 3.1 การจับคู่ตำแหน่งไฟล์และสร้าง Project Manifest (`atf.py setup`)
+
 เครื่องมือตั้งค่าจะค้นหาและจับคู่ตำแหน่งไฟล์ของเกมอัตโนมัติ:
-- โฟลเดอร์เกมเป้าหมาย (`Game Directory` เช่น `Example RPGM Game/離れ木の5日間+`)
-- โฟลเดอร์ข้อมูลเกม (`Game Data Directory` เช่น `www/data`)
-- สคริปต์ปลั๊กอิน (`www/js/plugins.js`)
-- ไฟล์ตารางข้อความต้นฉบับ / ไฟล์แปลเก่า (`raw_pre_csv`)
+- โฟลเดอร์เกมเป้าหมาย (`Game Directory` เช่น โฟลเดอร์เกมใหม่ของคุณ)
+- โฟลเดอร์ข้อมูลเกม (`Game Data Directory` เช่น `www/data` หรือ `data`)
+- สคริปต์ปลั๊กอิน (`www/js/plugins.js` หรือ `js/plugins.js`)
+- ไฟล์ตารางข้อความต้นฉบับบทสนทนา (`raw_pre_csv` ที่รวมมาจาก Translator++)
+- ไฟล์ตารางข้อความ UI ปลั๊กอิน (`legacy_plugin_csv` เช่น `data/plugins_texts.csv` ที่เพิ่งสกัดได้)
 - โฟลเดอร์ผลลัพธ์ (`output_dir`)
 
 ### คำสั่งรันตั้งค่า Workspace:
@@ -252,7 +270,8 @@ flowchart TD
 
 | ขั้นตอน | งานที่ทำ | คำสั่งสำหรับรัน |
 | :---: | :--- | :--- |
-| **0** | เปิดสะพานเชื่อมต่อ ChatGPT | `python atf.py bridge` |
+| **0.1** | **สกัดข้อความ UI จากปลั๊กอินเกมใหม่** | `python extract_game_plugins.py` |
+| **0.2** | เปิดสะพานเชื่อมต่อ ChatGPT | `python atf.py bridge` |
 | **1** | ตั้งค่า Workspace & Manifest | `python atf.py setup` |
 | **2** | **เตรียมข้อมูลทั้งเกมในคำสั่งเดียว** | `python atf.py prepare-all` |
 | 2.1 | สแกน Speaker Tags | `python atf.py scan` |

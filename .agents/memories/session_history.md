@@ -916,3 +916,28 @@
   - `docs/USER_MANUAL.md` (Single Definitive Master User Manual)
   - `README.md` (Updated Architectural Hub)
   - `archive/` (`legacy_agents/`, `legacy_tools/`, `root_scripts/`)
+
+### [2026-11-08 15:30] Session 26: Standalone Multi-File Plugin UI Text Extractor (`extract_game_plugins.py`)
+- **1. สิ่งที่ทำ (Actions Executed):**
+  - พัฒนาเครื่องมือสกัดอิสระ `extract_game_plugins.py` ใน Root Directory สำหรับเตรียมไฟล์ `plugins_texts.csv` จากโปรเจกต์เกมใหม่
+  - วางระบบ Interactive CLI แบบถาม-ตอบ 3 สเต็ป:
+    1. รับอินพุตโฟลเดอร์เกมต้นทาง (รองรับลากโฟลเดอร์มาวาง ลบเครื่องหมายคำพูดอัตโนมัติ)
+    2. ค้นหาโฟลเดอร์ `/js` อัตโนมัติ (ตรวจจับ `www/js` และ `js`)
+    3. สแกนสกัดข้อความ UI จากทั้ง `plugins.js` (Nested JSON Parameters) และ `plugins/*.js` (Code Literals & UI Functions)
+    4. แสดงสรุปผล และถามหาตำแหน่งสำหรับวางไฟล์ CSV ปลายทาง (Default: `data/plugins_texts.csv`)
+  - อัปเดต `docs/USER_MANUAL.md` เพิ่มขั้นตอน 3.0 และอัปเดต Command Cheat Sheet
+- **2. แนวคิดเชิงสถาปัตยกรรม (Architectural Rationale):**
+  - **Decoupled Pre-flight Utilities:** การแยกเครื่องมือเตรียมข้อมูลเบื้องต้นออกจาก Main Pipeline ทำให้ Framework มีความยืดหยุ่นสูง รองรับทั้งเกมเก่าและเกมใหม่ที่ไม่มีไฟล์ Plugin CSV มาก่อน
+  - **Safe UI Semantic Filtering:** สกัดเฉพาะข้อความแสดงผลภาษาธรรมชาติ (Japanese Kana/Kanji/Thai/UI labels) โดยไม่แตะต้องโค้ด สคริปต์ ตัวแปร หรือชื่อไฟล์ภาพ
+- **3. ความคืบหน้า (Progress & Milestones):**
+  - บรรลุ Phase 26 (Tasks 26.1 - 26.2) ใน `single_source_checkpoint.md`
+- **4. ผลการทดสอบ (Verification & Test Results):**
+  - รันการทดสอบ Unit Test จำลองโครงสร้าง RPG Maker MV (`test_plugin_extractor.py`):
+    - สกัด `回想モード` จาก `plugins.js` สำเร็จ 100%
+    - สกัด `CGギャラリー` และ `設定` จาก `plugins/SamplePlugin.js` สำเร็จ 100%
+    - ส่งออกเป็นไฟล์ CSV มาตรฐาน 8 คอลัมน์ (UTF-8-SIG) พร้อมใช้งาน
+- **5. สิ่งที่ต้องแก้ไข / อุปสรรค (Remaining Blockers / Next Fixes):**
+  - ไม่มี (พร้อมให้ผู้ใช้นำไปสกัดเกมใหม่ได้ทันที)
+- **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
+  - `extract_game_plugins.py` (Standalone Multi-File Plugin UI Text Extractor)
+  - `docs/USER_MANUAL.md` (Updated with Step 3.0 Pre-flight Extractor Guide)
