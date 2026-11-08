@@ -592,6 +592,34 @@ def build_unified_matrix(all_profiles):
     print(f"    - Saved to: {MATRIX_FILE}")
 
 
+def sync_profile_genders_to_glossary(all_profiles):
+    """ซิงค์เพศ (Gender) และชื่อแปลไทยจาก Character Profiles กลับเข้า tlas_glossary.json อัตโนมัติ"""
+    glossary_path = _manifest.get("output_glossary_json") or os.path.join(tlas_dir, "tlas_glossary.json")
+    if not os.path.exists(glossary_path):
+        return
+    try:
+        with open(glossary_path, "r", encoding="utf-8") as f:
+            gdata = json.load(f)
+        chars = gdata.get("Characters", {})
+        updated = 0
+        for name, pdata in all_profiles.items():
+            if name in chars:
+                p_gender = pdata.get("identity", {}).get("gender")
+                if p_gender and p_gender != "UNKNOWN":
+                    chars[name]["gender"] = p_gender
+                    updated += 1
+                p_th = pdata.get("th_name")
+                if p_th and (not chars[name].get("th") or chars[name].get("th").strip() == ""):
+                    chars[name]["th"] = p_th
+        if updated > 0:
+            with open(glossary_path, "w", encoding="utf-8") as f:
+                json.dump(gdata, f, ensure_ascii=False, indent=2)
+            print(f"[✔] Synced verified gender & identity for {updated} characters back to: {glossary_path}\n")
+    except Exception as e:
+        print(f"[!] Warning syncing glossary genders: {e}")
+
+
 if __name__ == "__main__":
     profiles = clean_profiles_and_enrich()
+    sync_profile_genders_to_glossary(profiles)
     build_unified_matrix(profiles)
