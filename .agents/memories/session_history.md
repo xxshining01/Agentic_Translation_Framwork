@@ -988,3 +988,29 @@
   - `src/atf/tools/analyze_character_profiles.py` (Live Bridge Connected Profiler)
   - `src/atf/tools/sync_profiles_and_matrix.py` (Resilient Pairwise Matrix Extractor)
   - `src/atf/__init__.py`, `src/atf/tools/__init__.py`
+
+### [2026-11-08 18:20] Session 30: Absolute Bridge Decoupling & 100% Standalone Python Preparation Pipeline
+- **1. สิ่งที่ทำ (Actions Executed):**
+  - **ตัดการพึ่งพา Bridge ออกจาก Stage 3d (`analyze_character_profiles.py`) โดยสิ้นเชิง 100%:**
+    - ลบการเรียก `wait_for_bridge_ready()` และการเชื่อมต่อเครือข่าย Bridge ออกจาก Stage 3d ทั้งหมด
+    - สถาปัตยกรรมใหม่ทำงานด้วย Python ล้วน 100% สกัดหลักฐานจริงจาก `rpgm_scenes_v5.json` และ `character_whitelist.json`
+    - พัฒนาฟังก์ชัน `extract_scene_co_occurrences()`: สแกนการปรากฏตัวร่วมฉาก (Scene Co-occurrence) ระหว่างตัวละครในทุก Scene Packets
+    - พัฒนาฟังก์ชัน `infer_linguistic_identity()` และ `infer_base_speech_style()`: วิเคราะห์เพศ วัย บุคลิกภาพ และความหยาบคาย/สุภาพ จากรูปประโยคภาษาญี่ปุ่นจริงในเกม
+    - พัฒนาฟังก์ชัน `derive_pairwise_relationship()`: สังเคราะห์ความสัมพันธ์คู่สนทนาเฉพาะคู่ (สามี-ภรรยา, ผู้ใหญ่-เด็ก, ผู้ใหญ่-คนชรา, ครู-ศิษย์, คนแปลกหน้า) พร้อมสรรพนามและคำลงท้าย
+  - **ทดสอบรันกระบวนการเตรียมข้อมูลทั้ง 8 ขั้นตอน (`atf.py prepare-all`):**
+    - Stage 3a ถึง 3h ทำงานติดต่อกันรวดเดียวตั้งแต่ต้นจนจบ 100% ปราศจากการหยุดรอหรือบล็อก Bridge
+    - Stage 3d สร้างโปรไฟล์ครบทั้ง 10 ตัวละคร พร้อมสกัดความสัมพันธ์เฉพาะคู่ได้ถึง 78 คู่
+    - Stage 3e สร้าง `global_pronoun_matrix.json` ได้กฎเฉพาะคู่ (Specific Pairwise Rules) ครบ 78 กฎ และ Demographic Matching 31 กฎ
+    - Stage 3g สร้าง `<Game>_enriched.csv` ครบ 1,564 แถว (Displayable 1,331 แถว, Shielded 233 แถว)
+  - **Commit & Push ขึ้น Git:** Commit `4ef3aea` ขึ้น GitHub `origin/main`
+- **2. แนวคิดเชิงสถาปัตยกรรม (Architectural Rationale):**
+  - **Absolute Pipeline Decoupling (Bridge is Transport, Not Pipeline Stage):** การเตรียมข้อมูล (Preparation Pipeline) ต้องสามารถรันได้ด้วยตัวมันเองอย่างสมบูรณ์แบบโดยไม่ต้องเปิด Bridge ทิ้งไว้ ส่วน Bridge คือช่องทางการสื่อสารสำหรับขั้นตอนการแปล (Translation Phase) เท่านั้น การแยกขาดจากกันทำให้ระบบเสถียร ไม่สะดุด และใช้งานได้จริงกับทุกเกม
+- **3. ความคืบหน้า (Progress & Milestones):**
+  - บรรลุ Phase 28 ใน `single_source_checkpoint.md` อย่างสมบูรณ์แบบ 100%
+- **4. ผลการทดสอบ (Verification & Test Results):**
+  - รัน `python atf.py prepare-all` สำเร็จครบทั้ง 8 ขั้นตอน (3a -> 3h) ด้วย Exit Code 0 ในเวลาเพียงไม่กี่วินาที
+- **5. สิ่งที่ต้องแก้ไข / อุปสรรค (Remaining Blockers / Next Fixes):**
+  - ไม่มี ข้อมูลพร้อมสำหรับการแปลจริงเรียบร้อยแล้ว
+- **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
+  - `src/atf/tools/analyze_character_profiles.py` (100% Standalone Python Evidence-Based Profiler)
+  - `E:\GameTranslator\5 Days of Separation After Story+ (output)\tlas\` (ครบทุกไฟล์: scene_packets, glossary, whitelist, profiles 10 ตัว, global_pronoun_matrix 78 คู่, sfx/dic, enriched CSV 10 มิติ, taxonomy)
