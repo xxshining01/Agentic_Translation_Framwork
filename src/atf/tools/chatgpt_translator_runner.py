@@ -21,6 +21,7 @@ import random
 import logging
 import urllib.request
 import urllib.error
+import glob
 
 # 喔曕福喔о笀喔�腑喔氞箒喔ム赴喙€喔炧复喙堗浮 src 喙€喔傕箟喔侧釜喔灌箞 sys.path 喙€喔炧阜喙堗腑喙冟斧喙夃釜喔侧浮喔侧福喔� import atf 喙勦笖喙夃箘喔∴箞喔о箞喔侧笀喔班福喔编笝喔堗覆喔佮箘喔斷箑喔｀竵喔椸腑喔｀傅喙冟笖
 src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -198,12 +199,72 @@ class ChatGPTTranslatorRunner:
             checkpoint_path = self.manifest.get("output_checkpoint_json") or os.path.join(workspace_root, DEFAULT_CHECKPOINT_PATH)
         self.checkpoint_path = checkpoint_path
 
-        if glossary_path is None:
-            glossary_path = self.manifest.get("output_glossary_json")
-        if scenes_path is None:
-            scenes_path = self.manifest.get("output_scenes_json")
-        if profiles_dir is None:
-            profiles_dir = self.manifest.get("output_profiles_dir")
+        # 1. Glossary Path Fallback & Auto-Sync
+        if glossary_path is None or not os.path.exists(glossary_path):
+            manifest_glossary = self.manifest.get("output_glossary_json")
+            legacy_glossary = self.manifest.get("legacy_glossary_json")
+            local_glossary = os.path.join(workspace_root, "data", "tlas", "tlas_glossary.json")
+            if manifest_glossary and os.path.exists(manifest_glossary):
+                glossary_path = manifest_glossary
+            elif legacy_glossary and os.path.exists(legacy_glossary):
+                glossary_path = legacy_glossary
+            elif os.path.exists(local_glossary):
+                glossary_path = local_glossary
+                if manifest_glossary:
+                    try:
+                        import shutil
+                        os.makedirs(os.path.dirname(manifest_glossary), exist_ok=True)
+                        shutil.copy2(local_glossary, manifest_glossary)
+                        glossary_path = manifest_glossary
+                    except Exception:
+                        pass
+            else:
+                glossary_path = manifest_glossary
+
+        # 2. Profiles Dir Fallback & Auto-Sync
+        if profiles_dir is None or not os.path.exists(profiles_dir) or not glob.glob(os.path.join(profiles_dir, "*.json")):
+            manifest_profiles = self.manifest.get("output_profiles_dir")
+            legacy_profiles = self.manifest.get("legacy_profiles_dir")
+            local_profiles = os.path.join(workspace_root, "data", "tlas", "profiles")
+            if manifest_profiles and os.path.exists(manifest_profiles) and glob.glob(os.path.join(manifest_profiles, "*.json")):
+                profiles_dir = manifest_profiles
+            elif legacy_profiles and os.path.exists(legacy_profiles) and glob.glob(os.path.join(legacy_profiles, "*.json")):
+                profiles_dir = legacy_profiles
+            elif os.path.exists(local_profiles) and glob.glob(os.path.join(local_profiles, "*.json")):
+                profiles_dir = local_profiles
+                if manifest_profiles:
+                    try:
+                        import shutil
+                        os.makedirs(manifest_profiles, exist_ok=True)
+                        for pf in glob.glob(os.path.join(local_profiles, "*.json")):
+                            shutil.copy2(pf, os.path.join(manifest_profiles, os.path.basename(pf)))
+                        profiles_dir = manifest_profiles
+                    except Exception:
+                        pass
+            else:
+                profiles_dir = manifest_profiles
+
+        # 3. Scenes Path Fallback & Auto-Sync
+        if scenes_path is None or not os.path.exists(scenes_path):
+            manifest_scenes = self.manifest.get("output_scenes_json")
+            local_scene_packets = os.path.join(workspace_root, "data", "tlas", "scene_packets.json")
+            local_scenes = os.path.join(workspace_root, "data", "tlas", "rpgm_scenes_v5.json")
+            if manifest_scenes and os.path.exists(manifest_scenes):
+                scenes_path = manifest_scenes
+            elif os.path.exists(local_scene_packets):
+                scenes_path = local_scene_packets
+                if manifest_scenes:
+                    try:
+                        import shutil
+                        os.makedirs(os.path.dirname(manifest_scenes), exist_ok=True)
+                        shutil.copy2(local_scene_packets, manifest_scenes)
+                        scenes_path = manifest_scenes
+                    except Exception:
+                        pass
+            elif os.path.exists(local_scenes):
+                scenes_path = local_scenes
+            else:
+                scenes_path = manifest_scenes
 
         self.checkpoint_data = self._load_checkpoint()
         self.glossary_scanner = GlossaryScanner(glossary_path=glossary_path, profiles_dir=profiles_dir)
@@ -1815,7 +1876,10 @@ Return ONLY the JSON array. No conversational text."""
                         combined_initial = f"{it.get('prefix', '')}{translated_dialogue}{it.get('suffix', '')}"
                     else:
                         combined_initial = f"{translated_prefix}{translated_dialogue}"
-                    rows[r_idx][1] = combined_initial
+                    init_target_idx = it.get("init_col_idx", 1)
+                    while len(rows[r_idx]) <= init_target_idx:
+                        rows[r_idx].append("")
+                    rows[r_idx][init_target_idx] = combined_initial
                     cached_rows[str(r_idx)] = combined_initial
 
                     # Record Listener in Note Column (Column 4)
@@ -2241,44 +2305,62 @@ Return ONLY the JSON array. No conversational text."""
         auto_resolved_symbols = 0
         already_filled_count = 0
 
+        # Dynamic column detection from CSV header
+        header_raw = rows[0]
+        header_lower = [c.strip().lower() for c in header_raw]
+
+        orig_idx = header_lower.index("original") if "original" in header_lower else 0
+        init_idx = header_lower.index("initial") if "initial" in header_lower else 1
+        disp_idx = header_lower.index("displayable") if "displayable" in header_lower else (7 if len(header_lower) > 7 and header_lower[7] == "displayable" else -1)
+        role_idx = header_lower.index("role") if "role" in header_lower else (3 if len(header_lower) == 10 else (5 if len(header_lower) > 5 else -1))
+        speaker_idx = header_lower.index("speaker") if "speaker" in header_lower else (4 if len(header_lower) == 10 else (6 if len(header_lower) > 6 else -1))
+        listener_idx = header_lower.index("listener") if "listener" in header_lower else (5 if len(header_lower) == 10 else -1)
+        filename_idx = header_lower.index("filename") if "filename" in header_lower else (7 if len(header_lower) == 10 else (2 if len(header_lower) > 2 else -1))
+        row_id_idx = header_lower.index("row") if "row" in header_lower else (8 if len(header_lower) == 10 else (3 if len(header_lower) > 3 else -1))
+
         for r_idx in range(1, len(rows)):
             row = rows[r_idx]
             if len(row) < 2:
                 continue
 
-            orig_text = row[0] if len(row) > 0 else ""
-            init_text = row[1] if len(row) > 1 else ""
-            filename = row[2] if len(row) > 2 else ""
-            line_id = row[3] if len(row) > 3 else ""
-            role = row[5] if len(row) > 5 else ""
-            speaker_col = row[6] if len(row) > 6 else ""
-            disp = row[7].strip().lower() if len(row) > 7 else ""
+            orig_text = row[orig_idx] if orig_idx != -1 and len(row) > orig_idx else (row[0] if len(row) > 0 else "")
+            init_text = row[init_idx] if init_idx != -1 and len(row) > init_idx else (row[1] if len(row) > 1 else "")
+            filename = row[filename_idx] if filename_idx != -1 and len(row) > filename_idx else ""
+            line_id = row[row_id_idx] if row_id_idx != -1 and len(row) > row_id_idx else ""
+            role = row[role_idx] if role_idx != -1 and len(row) > role_idx else ""
+            speaker_col = row[speaker_idx] if speaker_idx != -1 and len(row) > speaker_idx else ""
+            listener_col = row[listener_idx] if listener_idx != -1 and len(row) > listener_idx else ""
 
-            # 喔佮福喔�竾喔勦腑喔ム副喔∴笝喙� Displayable: 喙佮笘喔о笚喔掂箞喙勦浮喙堗箒喔�笖喔囙笢喔ム箖喔權箑喔佮浮 喔�箟喔侧浮喔�箞喔囙箖喔�箟 LLM 喙佮笡喔ム箑喔斷箛喔斷競喔侧笖!
+            # Dynamic Displayable check: If column exists, use it; if no column, default to "yes"
+            if disp_idx != -1 and len(row) > disp_idx:
+                disp = row[disp_idx].strip().lower()
+            else:
+                disp = "yes"
+
             if disp != "yes":
                 skipped_non_displayable += 1
                 if not init_text.strip() and orig_text.strip():
-                    row[1] = orig_text
+                    while len(row) <= init_idx:
+                        row.append("")
+                    row[init_idx] = orig_text
                     direct_copied_non_disp += 1
                 continue
 
-            # 喔栢箟喔侧箒喔栢抚喔權傅喙夃浮喔掂笟喔椸箒喔涏弗喔�涪喔灌箞喙佮弗喙夃抚 (喙勦浮喙堗抚喙堗覆喔�) 喙冟斧喙夃競喙夃覆喔∴笚喔编笝喔椸傅 100%!
             if init_text.strip():
                 already_filled_count += 1
                 continue
 
-            # 喔栢箟喔� Original 喔о箞喔侧竾喙€喔涏弗喙堗覆
             if not orig_text.strip():
                 continue
 
-            # 喔曕福喔о笀喔堗副喔氞笗喔编抚喙€喔ム競喙€喔囙复喔�/喔勦箞喔侧福喔班笟喔氞釜喔侧竵喔� (喙€喔娻箞喔� 18G, 20G, 48G): Auto-fill 喔椸副喔權笚喔� 喙勦浮喙堗釜喙堗竾喙勦笡 LLM
             clean_num = re.sub(r"\\[A-Za-z]+(?:\[\d+\])?|\\[\.\|\!\^\>\<]", "", orig_text).strip()
             if re.match(r"^\d+\s*G?$", clean_num, flags=re.IGNORECASE):
-                row[1] = orig_text
+                while len(row) <= init_idx:
+                    row.append("")
+                row[init_idx] = orig_text
                 auto_resolved_symbols += 1
                 continue
 
-            # 喔�竵喔编笖 speaker tag 喔堗覆喔� orig_text 喔�覆喔佮浮喔�
             has_tag, prefix, parsed_speaker, pure_text = self.extract_speaker_tag(orig_text)
             if has_tag:
                 final_speaker = parsed_speaker
@@ -2292,14 +2374,14 @@ Return ONLY the JSON array. No conversational text."""
             if prefix:
                 translated_prefix = self.glossary_scanner.translate_speaker_tag(prefix)
 
-            # 喔曕福喔о笀喔�腑喔� Pure Symbols / Single Locked Name: 喔栢箟喔侧箘喔∴箞喔∴傅喙€喔權阜喙夃腑喔�覆喔氞笚喔炧腹喔斷笀喔｀复喔� 喙冟斧喙� Auto-fill 喙傕笖喔⑧箘喔∴箞喔曕箟喔�竾喔�箞喔� LLM
             content_to_check = final_text.strip()
             if self.is_single_name_with_symbols(content_to_check, locked_terms, current_speaker=final_speaker):
-                row[1] = f"{translated_prefix}{final_text}"
+                while len(row) <= init_idx:
+                    row.append("")
+                row[init_idx] = f"{translated_prefix}{final_text}"
                 auto_resolved_symbols += 1
                 continue
 
-            # 喔勦箟喔權斧喔� Scene ID 喔椸傅喙堗箒喔椸箟喔堗福喔脆竾喔堗覆喔� SceneContextManager
             scene_id = "General_Scene"
             if hasattr(self, "scene_manager"):
                 scene_id = self.scene_manager.find_scene_for_row(r_idx, orig_text, file_name=filename, csv_rows=rows)
@@ -2309,11 +2391,13 @@ Return ONLY the JSON array. No conversational text."""
                 "prefix": prefix,
                 "translated_prefix": translated_prefix,
                 "speaker": final_speaker,
+                "listener": listener_col,
                 "role": role if role else "Dialogue/Story",
                 "id": str(r_idx),
                 "text": final_text,
                 "file": filename,
-                "scene_id": scene_id
+                "scene_id": scene_id,
+                "init_col_idx": init_idx
             })
 
         logger.info(f"Target CSV Empty-Row Scan Summary:")
@@ -2537,20 +2621,31 @@ Return ONLY the JSON array. No conversational text."""
         data_rows = reader[1:]
         logger.info(f"Total Plugin Text Rows: {len(data_rows):,} rows")
 
-        # 喔勦副喔斷竵喔｀腑喔囙箒喔栢抚喔椸傅喙堗涪喔编竾喙勦浮喙堗箘喔斷箟喙佮笡喔� (喔勦腑喔ム副喔∴笝喙� Initial 喔о箞喔侧竾喔�涪喔灌箞)
+        header_lower = [c.strip().lower() for c in header]
+        orig_idx = header_lower.index("original") if "original" in header_lower else 0
+        init_idx = header_lower.index("initial") if "initial" in header_lower else 1
+        disp_idx = header_lower.index("displayable") if "displayable" in header_lower else -1
+        speaker_idx = header_lower.index("speaker") if "speaker" in header_lower else -1
+        role_idx = header_lower.index("role") if "role" in header_lower else -1
+
         untranslated = []
         for idx, row in enumerate(data_rows):
-            orig_text = row[0] if len(row) > 0 else ""
-            init_text = row[1] if len(row) > 1 else ""
+            orig_text = row[orig_idx] if orig_idx != -1 and len(row) > orig_idx else (row[0] if len(row) > 0 else "")
+            init_text = row[init_idx] if init_idx != -1 and len(row) > init_idx else (row[1] if len(row) > 1 else "")
             if not orig_text or not orig_text.strip():
                 continue
+            if disp_idx != -1 and len(row) > disp_idx and row[disp_idx].strip().lower() != "yes":
+                continue
             if not init_text or not init_text.strip():
+                spk = row[speaker_idx] if speaker_idx != -1 and len(row) > speaker_idx and row[speaker_idx] else "UI/Plugin"
+                rle = row[role_idx] if role_idx != -1 and len(row) > role_idx and row[role_idx] else "UI/Plugin"
                 untranslated.append({
                     "row_idx": idx,
                     "id": f"PLUG_{idx + 1}",
-                    "speaker": row[6] if len(row) > 6 and row[6] else "UI/Plugin",
-                    "role": "UI/Plugin",
-                    "text": orig_text
+                    "speaker": spk,
+                    "role": rle,
+                    "text": orig_text,
+                    "init_col_idx": init_idx
                 })
 
         logger.info(f"Found {len(untranslated):,} untranslated Plugin rows out of {len(data_rows):,} rows.")
@@ -2631,7 +2726,19 @@ Return ONLY the JSON array. No conversational text."""
         # STEP 1: 喙佮笡喔� Plugin UI Texts
         # -------------------------------------------------------------
         if not plugins_file:
-            plugins_file = self.manifest.get("output_plugins_csv") or "data/plugins_texts.csv"
+            candidates = [
+                self.manifest.get("output_plugins_csv"),
+                self.manifest.get("legacy_plugin_csv"),
+                os.path.join(self.manifest.get("output_dir", ""), "plugins_texts.csv"),
+                os.path.join(workspace_root, "data", "plugins_texts.csv"),
+                "data/plugins_texts.csv"
+            ]
+            for c in candidates:
+                if c and os.path.exists(c):
+                    plugins_file = c
+                    break
+            if not plugins_file:
+                plugins_file = self.manifest.get("output_plugins_csv") or "data/plugins_texts.csv"
 
         if plugins_file and os.path.exists(plugins_file):
             logger.info(f"\n>>> [STEP 1/2] Translating Plugin UI Texts: {plugins_file}...")
@@ -2640,15 +2747,23 @@ Return ONLY the JSON array. No conversational text."""
                 max_items_per_batch=max_items,
                 batch_limit=batch_limit
             )
-            logger.info("鉁� [STEP 1/2] Plugin UI Texts translation completed!\n")
+            logger.info("✔ [STEP 1/2] Plugin UI Texts translation completed!\n")
         else:
             logger.warning(f"Plugin texts CSV not found at {plugins_file}, skipping Step 1.")
 
         # -------------------------------------------------------------
-        # STEP 2: 喙佮笡喔� Game Dialogue CSV 喔�弗喔编竵
+        # STEP 2: แปล Game Dialogue CSV หลัก
         # -------------------------------------------------------------
         if not csv_file:
-            csv_file = self.manifest.get("output_processed_csv")
+            candidates = [
+                self.manifest.get("output_enriched_csv"),
+                self.manifest.get("output_processed_csv"),
+                self.manifest.get("raw_pre_csv")
+            ]
+            for c in candidates:
+                if c and os.path.exists(c):
+                    csv_file = c
+                    break
             if not csv_file or not os.path.exists(csv_file):
                 candidate_paths = [
                     "Example RPGM Game/SSPV034v1.35 - Trans - Processed_v3.csv",

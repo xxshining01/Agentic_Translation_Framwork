@@ -80,26 +80,47 @@ class SceneContextManager:
             except Exception as e:
                 logger.warning(f"Error loading extractions from {self.extractions_dir}: {e}")
 
-        # 2. โหลด Scene Text จาก rpgm_scenes_v5.json เพื่อสร้าง Text -> Scene Index
+        # 2. โหลด Scene Text จาก rpgm_scenes_v5.json หรือ scene_packets.json เพื่อสร้าง Text -> Scene Index
         if os.path.exists(self.scenes_path):
             try:
                 with open(self.scenes_path, "r", encoding="utf-8") as f:
                     scenes_data = json.load(f)
-                for sc in scenes_data:
-                    source = sc.get("source", "")
+
+                # รองรับทั้ง Dict with 'packets', List of dicts, หรือ Dict of scene objects
+                if isinstance(scenes_data, dict):
+                    if "packets" in scenes_data and isinstance(scenes_data["packets"], list):
+                        scenes_list = scenes_data["packets"]
+                    else:
+                        scenes_list = [v for v in scenes_data.values() if isinstance(v, dict)]
+                elif isinstance(scenes_data, list):
+                    scenes_list = scenes_data
+                else:
+                    scenes_list = []
+
+                for sc in scenes_list:
+                    if not isinstance(sc, dict):
+                        continue
+                    source = sc.get("packet_id") or sc.get("source") or sc.get("scene_id") or ""
                     if not source:
                         continue
                     self.scenes_by_source[source] = sc
-                    sc_text = sc.get("text", "")
-                    if sc_text:
-                        # แยกทีละบรรทัดเพื่อทำ index
-                        for line in sc_text.split("\n"):
-                            clean_line = self._clean_text(line)
-                            if clean_line and len(clean_line) >= 8:
-                                # แมป 30 ตัวอักษรแรกของประโยคเข้ากับ source scene
-                                key = clean_line[:30]
-                                if key not in self.text_to_scene_id:
-                                    self.text_to_scene_id[key] = source
+
+                    # แตก Text จาก dialogues (Packet schema) หรือ text (v5 schema)
+                    lines_to_index = []
+                    if "dialogues" in sc and isinstance(sc["dialogues"], list):
+                        for dlg in sc["dialogues"]:
+                            t = dlg.get("text", "") if isinstance(dlg, dict) else str(dlg)
+                            if t:
+                                lines_to_index.extend(t.split("\n"))
+                    elif "text" in sc and sc["text"]:
+                        lines_to_index.extend(sc["text"].split("\n"))
+
+                    for line in lines_to_index:
+                        clean_line = self._clean_text(line)
+                        if clean_line and len(clean_line) >= 8:
+                            key = clean_line[:30]
+                            if key not in self.text_to_scene_id:
+                                self.text_to_scene_id[key] = source
 
                 logger.info(f"Loaded {len(self.scenes_by_source):,} scenes from {self.scenes_path} (Indexed {len(self.text_to_scene_id):,} text keys)")
             except Exception as e:

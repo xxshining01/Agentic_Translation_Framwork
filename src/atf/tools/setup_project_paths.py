@@ -338,7 +338,10 @@ def save_manifest(data: Dict[str, Any], seed_output_workspace: bool = False) -> 
         out_csv = os.path.join(out_dir, "processed_dialogues_v3.csv")
     out_csv = os.path.abspath(out_csv)
 
-    out_plugins_csv = os.path.join(out_dir, "plugins_texts_v035.csv")
+    out_plugins_csv = data.get("legacy_plugin_csv")
+    if not out_plugins_csv:
+        out_plugins_csv = os.path.join(out_dir, "plugins_texts.csv")
+    out_plugins_csv = os.path.abspath(out_plugins_csv)
 
     manifest = {
         "project_name": data.get("project_name", "ATF Localization Project"),

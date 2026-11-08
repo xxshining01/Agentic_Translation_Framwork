@@ -167,6 +167,28 @@ def main():
                 print(f"\n❌ ผิดพลาดในขั้นตอน: {desc} (Exit Code: {ret})")
                 sys.exit(ret)
 
+        # ซิงค์ไฟล์ TLAS ที่สร้างทั้งหมดไปยัง output_tlas_dir ใน manifest (ถ้ามี)
+        manifest_path = os.path.join(ROOT_DIR, "data", "project_manifest.json")
+        if os.path.exists(manifest_path):
+            try:
+                import json
+                import shutil
+                with open(manifest_path, "r", encoding="utf-8") as mf:
+                    mf_data = json.load(mf)
+                target_tlas = mf_data.get("output_tlas_dir")
+                local_tlas = os.path.join(ROOT_DIR, "data", "tlas")
+                if target_tlas and os.path.abspath(target_tlas) != os.path.abspath(local_tlas):
+                    os.makedirs(target_tlas, exist_ok=True)
+                    for root, dirs, files in os.walk(local_tlas):
+                        rel_path = os.path.relpath(root, local_tlas)
+                        dest_dir = os.path.join(target_tlas, rel_path)
+                        os.makedirs(dest_dir, exist_ok=True)
+                        for f in files:
+                            shutil.copy2(os.path.join(root, f), os.path.join(dest_dir, f))
+                    print(f"\n📦 [TLAS Sync] ซิงค์ไฟล์ฐานข้อมูลทั้งหมดไปยัง {target_tlas} เรียบร้อยแล้ว")
+            except Exception as sync_err:
+                print(f"\n⚠️ Warning during TLAS sync: {sync_err}")
+
         print("\n" + "="*70)
         print("✅ [ATF Preparation Complete] เตรียมข้อมูลทั้งเกมเสร็จสมบูรณ์ 100%!")
         print("💡 ขั้นตอนถัดไป:")
