@@ -1,0 +1,33 @@
+{
+  "_metadata": {
+    "version": "2.0",
+    "description": "ATF Scene Packet Template",
+    "schema": "Universal Scene Context Chunk"
+  },
+  "packets": [
+    {
+      "packet_id": "Map001_Packet_0001",
+      "filename": "Map001",
+      "event_id": 1,
+      "page_id": 1,
+      "event_context": "Map001_EV001_Page1",
+      "start_csv_row": 1,
+      "end_csv_row": 15,
+      "explicit_speakers": ["Hero", "Villager"],
+      "scene_metadata": {
+        "location": "Town Square",
+        "mood": "Calm",
+        "estimated_tokens": 1200
+      },
+      "choice_links": [],
+      "dialogues": [
+        {
+          "row": 1,
+          "speaker": "Hero",
+          "text": "Hello world.",
+          "clean_text": "Hello world."
+        }
+      ]
+    }
+  ]
+}

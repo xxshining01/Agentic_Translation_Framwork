@@ -1,0 +1,36 @@
+[
+  {
+    "speaker": "Hero",
+    "listener": "Villain",
+    "roles": [
+      "ROLE_CON_ENEMY"
+    ],
+    "affinity": "AFF_HOSTILE",
+    "intimacy": "INT_DISTANT",
+    "speech_style": {
+      "self_pronoun": "ฉัน",
+      "target_pronoun": "แก",
+      "third_person_pronoun": "มัน",
+      "ending_particle": "",
+      "formality_level": 1,
+      "derivation_rule": "RULE_HOSTILE_ENEMY"
+    }
+  },
+  {
+    "speaker": "Hero",
+    "listener": "Princess",
+    "roles": [
+      "ROLE_AUTH_RULER"
+    ],
+    "affinity": "AFF_RESPECT",
+    "intimacy": "INT_FORMAL",
+    "speech_style": {
+      "self_pronoun": "กระผม",
+      "target_pronoun": "องค์หญิง",
+      "third_person_pronoun": "ท่าน",
+      "ending_particle": "ครับ",
+      "formality_level": 5,
+      "derivation_rule": "RULE_SUBORDINATE_TO_AUTHORITY"
+    }
+  }
+]

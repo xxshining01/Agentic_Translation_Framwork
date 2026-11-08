@@ -1,0 +1,363 @@
+{
+  "version": "3.5",
+  "description": "TLAS 4D Relationship Matrix - Universal Extended Edition",
+  "categories": {
+    "GND": {
+      "name": "Gender",
+      "scope": "Character",
+      "type": "Static"
+    },
+    "AGE": {
+      "name": "Age Group",
+      "scope": "Character",
+      "type": "Static"
+    },
+    "PER": {
+      "name": "Personality",
+      "scope": "Character",
+      "type": "Timeline"
+    },
+    "REL_ROLE": {
+      "name": "Structural Social Roles",
+      "scope": "Hybrid",
+      "type": "Static"
+    },
+    "REL_AFF": {
+      "name": "Affinity & Feelings",
+      "scope": "Hybrid",
+      "type": "Timeline"
+    },
+    "REL_INT": {
+      "name": "Intimacy Level",
+      "scope": "Hybrid",
+      "type": "Timeline"
+    },
+    "REL_DYN": {
+      "name": "Power Dynamic",
+      "scope": "Hybrid",
+      "type": "Timeline"
+    },
+    "EMO": {
+      "name": "Emotion",
+      "scope": "Dialogue",
+      "type": "Dynamic"
+    },
+    "TON": {
+      "name": "Tone",
+      "scope": "Dialogue",
+      "type": "Dynamic"
+    },
+    "SIT": {
+      "name": "Situation",
+      "scope": "Dialogue",
+      "type": "Dynamic"
+    }
+  },
+  "pronoun_options": {
+    "self": [
+      "ผม",
+      "ฉัน",
+      "เรา",
+      "ข้า",
+      "หนู",
+      "กู",
+      "ดิฉัน",
+      "กระผม",
+      "ข้าน้อย",
+      "พี่",
+      "น้อง",
+      "ป๋า",
+      "เฮีย",
+      "เจ๊",
+      "ข้าพเจ้า"
+    ],
+    "target": [
+      "คุณ",
+      "นาย",
+      "เธอ",
+      "แก",
+      "มึง",
+      "ท่าน",
+      "เอ็ง",
+      "เจ้า",
+      "ฝ่าบาท",
+      "นายท่าน",
+      "พี่",
+      "น้อง",
+      "ตัวเอง",
+      "หนู"
+    ],
+    "ending": [
+      "ครับ",
+      "ค่ะ",
+      "วะ",
+      "โว้ย",
+      "เพคะ",
+      "พ่ะย่ะค่ะ",
+      "ขอรับ",
+      "เจ้าค่ะ",
+      "จ้ะ",
+      "จ๊ะ",
+      "ฮะ",
+      "ยะ",
+      "ย่ะ",
+      "สิ",
+      "นะ",
+      ""
+    ]
+  },
+  "pronoun_mapping_rules": [
+    {
+      "rule_id": "TIER0_DYNAMIC_SEDUCTIVE_LUST",
+      "priority_score": 98,
+      "conditions": {
+        "dynamic_tags": {
+          "emotion": "EMO_AROUSED",
+          "tone": "TON_SEDUCTIVE"
+        }
+      },
+      "pronouns": {
+        "self": "ฉัน/เค้า",
+        "target": "เธอ/ตัวเอง",
+        "ending": "จ๊ะ/จ๋า"
+      },
+      "notes": "Override: สถานการณ์ยั่วยวน/บรรยากาศพาไป บังคับใช้สรรพนามออดอ้อนและเสียงอ่อน"
+    },
+    {
+      "rule_id": "TIER1_LOVE_HATE_TSUNDERE",
+      "priority_score": 90,
+      "conditions": {
+        "relation": {
+          "roles": [
+            "ROLE_CON_RIVAL",
+            "ROLE_SOC_PEER"
+          ],
+          "affinity": "AFF_CONFLICTED",
+          "power_dynamic": "DYN_EQUAL"
+        }
+      },
+      "pronouns": {
+        "self": "ฉัน",
+        "target": "นาย",
+        "ending": "ย่ะ/ยะ"
+      },
+      "notes": "คู่กัด/ปากไม่ตรงกับใจ (หากอารมณ์เปลี่ยนเป็น TON_HESITANT จะถูก Override ให้เสียงอ่อนลง)"
+    },
+    {
+      "rule_id": "TIER1_PREDATORY_HARASSMENT",
+      "priority_score": 95,
+      "conditions": {
+        "relation": {
+          "roles": [
+            "ROLE_SOC_VIP",
+            "ROLE_AUTH_MASTER"
+          ],
+          "affinity": "AFF_PREDATORY",
+          "power_dynamic": "DYN_DOMINANT"
+        },
+        "dynamic_tags": {
+          "tone": "TON_PLAYFUL"
+        }
+      },
+      "pronouns": {
+        "self": "ป๋า/พี่/ฉัน",
+        "target": "หนู/เธอ",
+        "ending": "จ๊ะ/คร้าบ"
+      },
+      "notes": "การคุกคามทางเพศจากผู้มีอำนาจ (ทำตัวตีสนิทแบบน่าขนลุก)"
+    },
+    {
+      "rule_id": "TIER1_OBSESSIVE_YANDERE",
+      "priority_score": 96,
+      "conditions": {
+        "relation": {
+          "roles": [
+            "ROLE_ROM_OFFICIAL",
+            "ROLE_ROM_ILLICIT"
+          ],
+          "affinity": "AFF_OBSESSIVE",
+          "power_dynamic": "DYN_DOMINANT"
+        },
+        "dynamic_tags": {
+          "tone": "TON_COLD"
+        }
+      },
+      "pronouns": {
+        "self": "ฉัน/พี่",
+        "target": "เธอ/หนู",
+        "ending": ""
+      },
+      "notes": "คลั่งรัก/หึงหวงรุนแรง (น้ำเสียงเย็นชาบังคับข่มขู่ แต่อ้างความรัก)"
+    },
+    {
+      "rule_id": "TIER2_MASTER_TO_OUTCAST",
+      "priority_score": 85,
+      "conditions": {
+        "relation": {
+          "roles": [
+            "ROLE_SOC_OUTCAST"
+          ],
+          "affinity": "AFF_HOSTILE"
+        },
+        "speaker_base": {
+          "power_dynamic": "DYN_DOMINANT"
+        }
+      },
+      "pronouns": {
+        "self": "ข้า/ฉัน",
+        "target": "เอ็ง/แก",
+        "ending": "วะ/เว้ย"
+      },
+      "notes": "คุยกับทาส/เชลย/ผู้ถูกตัดทิ้งจากสังคม ด้วยความเหยียดหยาม"
+    },
+    {
+      "rule_id": "TIER2_ROLE_AUTH_SUBMISSIVE_FANTASY",
+      "priority_score": 80,
+      "conditions": {
+        "relation": {
+          "roles": [
+            "ROLE_AUTH_MASTER"
+          ],
+          "power_dynamic": "DYN_SUBMISSIVE"
+        }
+      },
+      "pronouns": {
+        "self": "ข้าน้อย/กระหม่อม",
+        "target": "นายท่าน/ฝ่าบาท",
+        "ending": "ขอรับ/พ่ะย่ะค่ะ"
+      },
+      "notes": "หากเซ็ตอัปโลกเป็นยุคกลาง/จอมยุทธ์ ใช้ Rule นี้แทนกระผม/ครับ"
+    }
+  ],
+  "tags": {
+    "ROLE_KIN_ELDER": {
+      "desc": "ญาติผู้ใหญ่/ผู้ปกครอง"
+    },
+    "ROLE_KIN_PEER": {
+      "desc": "พี่น้อง/เครือญาติรุ่นเดียวกัน"
+    },
+    "ROLE_KIN_CHILD": {
+      "desc": "บุตร/สายเลือดรุ่นหลัง"
+    },
+    "ROLE_AUTH_MASTER": {
+      "desc": "ผู้กุมอำนาจ (กษัตริย์/บอสมาเฟีย/ประธาน)"
+    },
+    "ROLE_AUTH_SERVANT": {
+      "desc": "ผู้อยู่ใต้อำนาจ (ขุนนาง/ศิษย์/ลูกน้อง)"
+    },
+    "ROLE_AUTH_MENTOR": {
+      "desc": "ผู้ชี้แนะ (อาจารย์/รุ่นพี่)"
+    },
+    "ROLE_SOC_PEER": {
+      "desc": "สถานะเทียบเท่า (เพื่อนร่วมชั้น/สมาชิกแก๊ง)"
+    },
+    "ROLE_SOC_VIP": {
+      "desc": "บุคคลสำคัญ (สปอนเซอร์/ลูกค้า)"
+    },
+    "ROLE_SOC_STRANGER": {
+      "desc": "คนแปลกหน้า"
+    },
+    "ROLE_SOC_OUTCAST": {
+      "desc": "ทาส/เชลย/แพะรับบาป/ชนชั้นต่ำ (สถานะหลุดจากสังคมปกติ)"
+    },
+    "ROLE_ROM_OFFICIAL": {
+      "desc": "คู่ความสัมพันธ์เปิดเผย (สามีภรรยา/คนรักทางการ)"
+    },
+    "ROLE_ROM_ILLICIT": {
+      "desc": "คู่ความสัมพันธ์ซ่อนเร้น (ชู้/เมียน้อย/คู่นอนลับ)"
+    },
+    "ROLE_CON_RIVAL": {
+      "desc": "คู่แข่ง (ธุรกิจ/ศัตรูหัวใจ/ฮีโร่ vs ตัวร้าย)"
+    },
+    "ROLE_CON_ENEMY": {
+      "desc": "ศัตรูอาฆาต (เป้าหมายสังหาร/ปรปักษ์)"
+    },
+    "AFF_DEVOTED": {
+      "desc": "ศรัทธา/ยอมตายแทนได้/ภักดีสูงสุด"
+    },
+    "AFF_FOND": {
+      "desc": "ชอบพอ/ไว้ใจ/รักแบบปกติ"
+    },
+    "AFF_INTRIGUED": {
+      "desc": "สนใจ/สะดุดตา/ถูกใจแต่ยังไม่ผูกพัน (หยั่งเชิง/อยากรู้จัด)"
+    },
+    "AFF_NEUTRAL": {
+      "desc": "เฉยๆ/มืออาชีพ/ตามมารยาท"
+    },
+    "AFF_HIDDEN_CRUSH": {
+      "desc": "แอบรัก/โหยหา/มีใจแต่ต้องเก็บซ่อนไว้"
+    },
+    "AFF_CONFLICTED": {
+      "desc": "ย้อนแย้ง/ปากไม่ตรงกับใจ (Love-Hate/Tsundere)"
+    },
+    "AFF_SUSPICIOUS": {
+      "desc": "ระแวง/ไม่ชอบหน้า/ไม่ไว้ใจ"
+    },
+    "AFF_HOSTILE": {
+      "desc": "เกลียดชัง/อาฆาต"
+    },
+    "AFF_PREDATORY": {
+      "desc": "คุกคาม/หวังเคลม/มองเป็นของเล่นหรือเหยื่อ"
+    },
+    "AFF_OBSESSIVE": {
+      "desc": "คลั่งรัก/หึงหวงรุนแรง/ยันเดเระ (ยึดติดผิดปกติ)"
+    },
+    "INT_CONFIDANT": {
+      "desc": "รู้ใจ/แชร์ความลับ/พึ่งพิงขั้นสุด"
+    },
+    "INT_FAMILIAR": {
+      "desc": "คุ้นเคย/สนิทปกติ"
+    },
+    "INT_DISTANT": {
+      "desc": "ห่างเหิน/ทางการ/มีกำแพงป้องกัน"
+    },
+    "INT_ESTRANGED": {
+      "desc": "ตัดขาดความสัมพันธ์/เคยสนิทแต่ตอนนี้กลายเป็นคนแปลกหน้า"
+    },
+    "DYN_DOMINANT": {
+      "desc": "ผู้นำ/คุมเกม/มีสิทธิ์สั่งการ"
+    },
+    "DYN_EQUAL": {
+      "desc": "เท่าเทียม/คานอำนาจกัน"
+    },
+    "DYN_SUBMISSIVE": {
+      "desc": "ผู้ตาม/ยอมจำนน/ไร้ทางสู้"
+    },
+    "EMO_ANGER": {
+      "desc": "โกรธจัด"
+    },
+    "EMO_SADNESS": {
+      "desc": "โศกเศร้า/ร้องไห้"
+    },
+    "EMO_FEAR": {
+      "desc": "หวาดกลัว/แพนิค"
+    },
+    "EMO_AROUSED": {
+      "desc": "หวั่นไหวทางเพศ/มีอารมณ์ปรารถนา"
+    },
+    "TON_AGGRESSIVE": {
+      "desc": "ก้าวร้าว/ข่มขู่"
+    },
+    "TON_COLD": {
+      "desc": "เย็นชา/เชือดเฉือน"
+    },
+    "TON_PLAYFUL": {
+      "desc": "หยอกล้อ/ขี้เล่น"
+    },
+    "TON_SARCASTIC": {
+      "desc": "ประชดประชัน/เหน็บแนม"
+    },
+    "TON_MOCKING": {
+      "desc": "เยาะเย้ย/ดูถูก/เหยียดหยาม"
+    },
+    "TON_SEDUCTIVE": {
+      "desc": "ยั่วยวน/ออดอ้อน/ทอดสะพาน"
+    },
+    "TON_HESITANT": {
+      "desc": "ลังเล/ตะกุกตะกัก/เสียงอ่อนลง"
+    },
+    "TON_GENTLE": {
+      "desc": "นุ่มนวล/ปลอบประโลม"
+    }
+  }
+}

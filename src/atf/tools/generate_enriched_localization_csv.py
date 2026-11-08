@@ -490,7 +490,8 @@ def main():
             default_output = os.path.join(out_dir, "enriched_localization.csv")
 
     default_game_data = manifest.get("game_data_directory") or os.path.join("www", "data")
-    default_scene_packets = os.path.join(WORKSPACE_ROOT, "data", "tlas", "scene_packets.json")
+    tlas_dir = manifest.get("output_tlas_dir") or os.path.join(WORKSPACE_ROOT, "data", "tlas")
+    default_scene_packets = manifest.get("output_scenes_json") or os.path.join(tlas_dir, "scene_packets.json")
 
     parser = argparse.ArgumentParser(description="ATF Universal Enriched Localization CSV Generator")
     parser.add_argument("--input", type=str, default=default_input, help="Path to input dialogue CSV")

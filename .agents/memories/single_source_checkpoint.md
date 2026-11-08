@@ -400,4 +400,30 @@
 - [x] **Task 27.4: SceneContextManager Robust Parsing for Packet Schema**
   - ปรับปรุง `scene_context_manager.py`: รองรับโครงสร้าง `scene_packets.json` ที่มีคีย์ `packets` ป้องกันข้อผิดพลาด `'str' object has no attribute 'get'` เมื่ออ่าน JSON แบบ Dict
 
+---
+
+### Phase 28: True Universal Game Analysis & 8-Stage Preparation Architecture (v6.0)
+- [x] **Task 28.1: Complete Purge of Hardcoded Character Definitions**
+  - ลบ `src/atf/tools/synthesize_clean_profiles.py` ที่มี `CHARACTER_DEFINITIONS` เดิมทิ้งถาวร
+  - ปรับปรุง `src/atf/tools/build_master_glossary.py`: กำจัด `CHARACTER_TRANSLATIONS` ฮาร์ดโค้ดออก 100% สกัดชื่อจาก `Actors.json` และ Speaker Tags จริงของเกมใหม่เท่านั้น
+- [x] **Task 28.2: Decoupled Bridge Architecture & Standalone Service Paradigm**
+  - แยก `atf.py bridge` ออกจากกระบวนการ Pipeline เป็นอิสระ 100% ผู้ใช้สามารถเปิด/ปิดได้ตามต้องการ
+  - ปรับปรุงให้โมดูลที่ต้องการใช้ AI มีระบบ Auto-detecting Heartbeat ตรวจสอบสถานะของ Bridge
+- [x] **Task 28.3: Dedicated Templates Isolation (`templates/`)**
+  - จัดตั้งโฟลเดอร์ `templates/` แยกต่างหากใน Root: บรรจุ `taxonomy.template.json`, `tlas_glossary.template.json`, `character_profile.template.json`, `sfx_glossary.template.json`, `dic_glossary.template.json`, `scene_packet.template.json`, `global_pronoun_matrix.template.json`, `alias_mapping.template.json`
+  - ยุติการสร้างหรือก๊อปปี้ไฟล์เทมเพลตซ้ำซ้อนลงในโฟลเดอร์ผลลัพธ์ของเกม
+- [x] **Task 28.4: Implementation of the 8 Concrete Preparation Stages (3a - 3h)**
+  - Stage 3a (`prepare-scenes`): สกัดฉากและ Event Flow บันทึกลง `<output_tlas_dir>/scene_packets.json`
+  - Stage 3b (`prepare-glossary`): สกัด Entities (Actors, Items, Skills, Places, System) สู่ `<output_tlas_dir>/tlas_glossary.json`
+  - Stage 3c (`prepare-whitelist`): คัดกรองตัวละครสำคัญเข้าสู่ `<output_tlas_dir>/character_whitelist.json` ตามเกณฑ์ ADR-035
+  - Stage 3d (`prepare-profiles`): สร้าง `analyze_character_profiles.py` ส่งบทพูดจริงให้ ChatGPT สังเคราะห์โปรไฟล์ V4 รายบุคคล
+  - Stage 3e (`prepare-matrix`): ประมวลผลโปรไฟล์เป็นตารางสรรพนามคู่สนทนาและ Demographic Rules (`global_pronoun_matrix.json`)
+  - Stage 3f (`prepare-sfx-dic`): สร้าง `extract_sfx_and_dic.py` สกัด Onomatopoeia (`sfx_glossary.json`) และคำเฉพาะ/แสลง (`dic_glossary.json`)
+  - Stage 3g (`prepare-table`): ประกอบตาราง 10 มิติ (`<Game>_enriched.csv`) พร้อมระบบ Game Shielding
+  - Stage 3h (`prepare-taxonomy`): สร้าง `generate_game_taxonomy.py` สร้าง Taxonomy ว่างประจำเกม
+- [x] **Task 28.5: Master Universal CLI (`atf.py`) & User Manual Alignment**
+  - อัปเดต `atf.py` รองรับ Subcommands ย่อยทั้ง 8 สเต็ป (`prepare-scenes` ถึง `prepare-taxonomy`) และคำสั่งรวม `prepare-all`
+  - อัปเดต `docs/USER_MANUAL.md` ให้เรียงลำดับขั้นตอนและอธิบายรายละเอียดทั้ง 8 สเต็ปอย่างสมบูรณ์
+
+
 

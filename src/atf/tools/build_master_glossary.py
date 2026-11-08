@@ -1,228 +1,254 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ATF Master Glossary & Character Whitelist Builder
-สร้าง tlas_glossary.json ที่มีรายชื่อตัวละครครบ 100% จากผลการสแกน
-และสร้าง character_whitelist.json สำหรับตัวละครหลักตามข้อกำหนด ADR-035
+ATF Universal Master Glossary Builder (v6.0 - Zero Hardcode)
+============================================================
+สกัดคำศัพท์และชื่อเฉพาะจากฐานข้อมูลตัวเกมจริง (Actors, Items, Skills, MapInfos, System)
+และจากบทสนทนา (Speaker Tags) โดยปราศจาก Hardcoded Character Definitions 100%
+
+สถาปัตยกรรม:
+- Grounded Evidence: ดึงชื่อจริงจาก Game Database และ Dialogue CSV
+- User Baseline Matching: หากผู้ใช้ระบุ baseline/legacy glossary ไว้ใน setup จะทำการดึงคำแปลมาแมปให้อัตโนมัติ
+- Zero Fallback Trap: ไม่เดาเพศหรือนิสัยเอง บันทึกโครงสร้างที่เป็นกลาง
+- Target Deliverable: บันทึกไฟล์ tlas_glossary.json ลงใน output_glossary_json ตาม Manifest
 """
 
 import os
 import sys
 import json
+import csv
+import re
+from typing import Dict, Any, List
+
+# Ensure UTF-8 output on Windows terminals
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
+    except Exception:
+        pass
 
 WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
-SCANNED_JSON = os.path.join(WORKSPACE_ROOT, "data", "tlas", "scanned_speakers.json")
-OUTPUT_GLOSSARY = os.path.join(WORKSPACE_ROOT, "data", "tlas", "tlas_glossary.json")
-OUTPUT_WHITELIST = os.path.join(WORKSPACE_ROOT, "data", "tlas", "character_whitelist.json")
+MANIFEST_PATH = os.path.join(WORKSPACE_ROOT, "data", "project_manifest.json")
+TEMPLATE_GLOSSARY_PATH = os.path.join(WORKSPACE_ROOT, "templates", "tlas_glossary.template.json")
 
-# พจนานุกรมคำแปลภาษาไทยมาตรฐาน 1:1 ของตัวละครในเกม 離れ木の5日間+
-CHARACTER_TRANSLATIONS = {
-    "凛": {
-        "th": "ริน",
-        "gender": "FEMALE",
-        "role_category": "Core",
-        "analysis_target": True,
-        "reason": "Heroine / Wife / Main Protagonist"
-    },
-    "遠藤": {
-        "th": "เอ็นโด",
-        "gender": "MALE",
-        "role_category": "Core",
-        "analysis_target": True,
-        "reason": "Innkeeper / Main Antagonist"
-    },
-    "夫": {
-        "th": "สามี",
-        "gender": "MALE",
-        "role_category": "Core",
-        "analysis_target": True,
-        "reason": "Protagonist / Husband"
-    },
-    "西原": {
-        "th": "นิชิฮาระ",
-        "gender": "MALE",
-        "role_category": "Core",
-        "analysis_target": True,
-        "reason": "Ex-boyfriend / Antagonist"
-    },
-    "？？？": {
-        "th": "？？？",
-        "gender": "UNKNOWN",
-        "role_category": "System",
-        "analysis_target": False,
-        "reason": "Anonymous speaker tag placeholder"
-    },
-    "学生B": {
-        "th": "นักศึกษา B",
-        "gender": "MALE",
-        "role_category": "Ambient",
-        "analysis_target": False,
-        "reason": "Secondary mob student B"
-    },
-    "受付のおばあさん": {
-        "th": "คุณยายพนักงานต้อนรับ",
-        "gender": "FEMALE",
-        "role_category": "Core",
-        "analysis_target": True,
-        "reason": "Elderly innkeeper receptionist"
-    },
-    "学生A": {
-        "th": "นักศึกษา A",
-        "gender": "MALE",
-        "role_category": "Ambient",
-        "analysis_target": False,
-        "reason": "Secondary mob student A"
-    },
-    "孫": {
-        "th": "หลานชาย",
-        "gender": "MALE",
-        "role_category": "Core",
-        "analysis_target": True,
-        "reason": "Receptionist's young grandson / Shota"
-    },
-    "学生2人": {
-        "th": "นักศึกษา 2 คน",
-        "gender": "MALE",
-        "role_category": "Ambient",
-        "analysis_target": False,
-        "reason": "Two mob students group line"
-    },
-    "チャラそうなやつ①": {
-        "th": "หนุ่มเพลย์บอย ①",
-        "gender": "MALE",
-        "role_category": "Ambient",
-        "analysis_target": False,
-        "reason": "Flirty street mob 1"
-    },
-    "チャラそうなやつ②": {
-        "th": "หนุ่มเพลย์บอย ②",
-        "gender": "MALE",
-        "role_category": "Ambient",
-        "analysis_target": False,
-        "reason": "Flirty street mob 2"
-    },
-    "学生": {
-        "th": "นักศึกษา",
-        "gender": "MALE",
-        "role_category": "Ambient",
-        "analysis_target": False,
-        "reason": "Single mob student"
+
+def load_manifest() -> Dict[str, Any]:
+    if os.path.exists(MANIFEST_PATH):
+        with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+def load_json_safe(filepath: str) -> Any:
+    if filepath and os.path.exists(filepath):
+        try:
+            with open(filepath, "r", encoding="utf-8-sig") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return None
+
+
+def extract_game_entities(data_dir: str) -> Dict[str, List[str]]:
+    """สกัด Entity Names จาก Game Database JSONs"""
+    entities = {
+        "actors": [],
+        "items": [],
+        "skills": [],
+        "places": [],
+        "system": []
     }
-}
+    if not data_dir or not os.path.exists(data_dir):
+        return entities
 
-# คำศัพท์ระบบ / ตัวเลือกเมนู
-SYSTEM_CHOICES_TRANSLATIONS = {
-    "はい": {"th": "ใช่", "type": "SystemChoice", "enforce": True},
-    "いいえ": {"th": "ไม่ใช่", "type": "SystemChoice", "enforce": True},
-    "やめる": {"th": "ยกเลิก", "type": "SystemChoice", "enforce": True}
-}
+    # 1. Actors.json
+    actors_data = load_json_safe(os.path.join(data_dir, "Actors.json"))
+    if isinstance(actors_data, list):
+        for act in actors_data:
+            if isinstance(act, dict) and act.get("name") and act["name"].strip():
+                entities["actors"].append(act["name"].strip())
+
+    # 2. Items.json, Weapons.json, Armors.json
+    for item_file in ["Items.json", "Weapons.json", "Armors.json"]:
+        items_data = load_json_safe(os.path.join(data_dir, item_file))
+        if isinstance(items_data, list):
+            for it in items_data:
+                if isinstance(it, dict) and it.get("name") and it["name"].strip():
+                    entities["items"].append(it["name"].strip())
+
+    # 3. Skills.json
+    skills_data = load_json_safe(os.path.join(data_dir, "Skills.json"))
+    if isinstance(skills_data, list):
+        for sk in skills_data:
+            if isinstance(sk, dict) and sk.get("name") and sk["name"].strip():
+                entities["skills"].append(sk["name"].strip())
+
+    # 4. MapInfos.json
+    map_data = load_json_safe(os.path.join(data_dir, "MapInfos.json"))
+    if isinstance(map_data, list):
+        for mp in map_data:
+            if isinstance(mp, dict) and mp.get("name") and mp["name"].strip():
+                entities["places"].append(mp["name"].strip())
+
+    # 5. System.json
+    sys_data = load_json_safe(os.path.join(data_dir, "System.json"))
+    if isinstance(sys_data, dict):
+        terms = sys_data.get("terms", {})
+        if isinstance(terms, dict):
+            for cat in ["basic", "commands", "params"]:
+                vals = terms.get(cat, [])
+                if isinstance(vals, list):
+                    for v in vals:
+                        if v and isinstance(v, str) and v.strip():
+                            entities["system"].append(v.strip())
+
+    return entities
 
 
-def build_glossary():
+def extract_csv_speakers(csv_path: str) -> List[str]:
+    """สกัด Distinct Speakers จาก Speaker Tag ใน CSV"""
+    speakers = set()
+    if not csv_path or not os.path.exists(csv_path):
+        return list(speakers)
+
+    tag_regex = re.compile(r'^[【\[]([^】\]\r\n]+)[】\]]|^<([^:>]+):?>')
+    with open(csv_path, "r", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if not row or not row[0].strip():
+                continue
+            text = row[0].strip()
+            m = tag_regex.match(text)
+            if m:
+                spk = m.group(1) or m.group(2)
+                if spk and spk.strip():
+                    speakers.add(spk.strip())
+            # ถ้ามีคอลัมน์ Speaker ชัดเจน (เช่น index 4 หรือ 6)
+            if len(row) > 4 and row[4] and row[4].strip() not in ["None", "Speaker", ""]:
+                speakers.add(row[4].strip())
+    return sorted(list(speakers))
+
+
+def build_master_glossary():
+    manifest = load_manifest()
+    data_dir = manifest.get("game_data_directory", "")
+    csv_path = manifest.get("raw_pre_csv") or manifest.get("output_processed_csv", "")
+    legacy_glossary_path = manifest.get("legacy_glossary_json", "")
+    
+    # พิกัดไฟล์ปลายทาง (First-Class Citizen)
+    output_glossary = manifest.get("output_glossary_json")
+    if not output_glossary:
+        tlas_dir = manifest.get("output_tlas_dir") or os.path.join(WORKSPACE_ROOT, "data", "tlas")
+        output_glossary = os.path.join(tlas_dir, "tlas_glossary.json")
+    output_glossary = os.path.abspath(output_glossary)
+
     print("=" * 80)
-    print("      ATF MASTER GLOSSARY & CHARACTER WHITELIST BUILDER (ADR-035)      ")
+    print("      ATF UNIVERSAL MASTER GLOSSARY BUILDER (v6.0 - Zero Hardcode)      ")
     print("=" * 80)
+    print(f"[*] Game Data Directory: {data_dir or '(Not specified)'}")
+    print(f"[*] Dialogue Source CSV: {csv_path or '(Not specified)'}")
+    print(f"[*] Target Glossary Out: {output_glossary}")
 
-    if not os.path.exists(SCANNED_JSON):
-        print(f"❌ Error: ไม่พบไฟล์ผลการสแกน {SCANNED_JSON}")
-        sys.exit(1)
+    # โหลด Baseline Glossary เดิมที่ผู้ใช้เลือก (ถ้ามี)
+    baseline_glossary = {}
+    if legacy_glossary_path and os.path.exists(legacy_glossary_path):
+        print(f"[*] Loaded User Baseline Glossary: {legacy_glossary_path}")
+        baseline_glossary = load_json_safe(legacy_glossary_path) or {}
 
-    with open(SCANNED_JSON, "r", encoding="utf-8") as f:
-        scan_data = json.load(f)
+    # สกัดข้อมูลจริงจากเกม
+    game_entities = extract_game_entities(data_dir)
+    csv_speakers = extract_csv_speakers(csv_path)
 
-    speakers_list = scan_data.get("speakers", [])
-    print(f"[*] Loaded {len(speakers_list)} distinct speakers from scanned_speakers.json")
+    # รวมรายชื่อตัวละคร (Actors.json + CSV Speakers)
+    all_characters = sorted(list(set(game_entities["actors"] + csv_speakers)))
+    print(f"[✔] Extracted {len(all_characters)} Characters ({len(game_entities['actors'])} from Actors.json, {len(csv_speakers)} from Dialogue tags)")
+    print(f"[✔] Extracted {len(game_entities['items'])} Items/Equipment")
+    print(f"[✔] Extracted {len(game_entities['places'])} Places/Maps")
+    print(f"[✔] Extracted {len(game_entities['skills'])} Skills")
+    print(f"[✔] Extracted {len(game_entities['system'])} System Terms")
 
+    # ประกอบ Master Glossary
     glossary = {
         "_metadata": {
-            "version": "4.2",
-            "game": "離れ木の5日間+",
-            "source_language": "ja",
-            "target_language": "th",
-            "adr_compliance": "ADR-035 (Decoupled Glossary vs Profile)"
+            "version": "6.0",
+            "description": "ATF Game Master Glossary (Zero Hardcode Evidence-Based)",
+            "total_characters": len(all_characters),
+            "total_items": len(game_entities["items"]),
+            "total_places": len(game_entities["places"]),
+            "total_skills": len(game_entities["skills"])
         },
         "Characters": {},
-        "Choices": SYSTEM_CHOICES_TRANSLATIONS,
-        "Places": {
-            "民宿　離れ木": {"th": "เกสต์เฮาส์ ฮานาเรกิ", "type": "ProperNoun", "enforce": True},
-            "露天風呂": {"th": "บ่อน้ำร้อนกลางแจ้ง", "type": "CommonNoun", "enforce": True},
-            "縁側": {"th": "เฉลียงทางเดิน", "type": "CommonNoun", "enforce": True}
-        },
         "Items": {},
-        "Skills": {}
+        "Places": {},
+        "Skills": {},
+        "System_UI": {}
     }
 
-    whitelist = []
-
-    for item in speakers_list:
-        tag = item["speaker_tag"]
-        count = item["dialogue_count"]
-
-        # ดึงการตั้งค่าแปลภาษาไทย
-        info = CHARACTER_TRANSLATIONS.get(tag, {
-            "th": tag,
-            "gender": "UNKNOWN",
-            "role_category": "Ambient",
-            "analysis_target": False,
-            "reason": "Scanned NPC"
-        })
-
-        is_target = info["analysis_target"]
-
-        glossary["Characters"][tag] = {
-            "th": info["th"],
-            "type": "ProperNoun" if is_target else "CommonNoun",
-            "role_category": info["role_category"],
-            "analysis_target": is_target,
-            "gender": info["gender"],
-            "enforce": True,
-            "dialogue_count": count,
-            "aliases": [],
-            "reason": info["reason"]
+    # 1. Characters Section
+    base_chars = baseline_glossary.get("Characters", {})
+    for char in all_characters:
+        th_val = ""
+        gender_val = "UNKNOWN"
+        role_val = "Dialogue Speaker"
+        
+        # ดึงจาก baseline ถ้ามี
+        if char in base_chars:
+            th_val = base_chars[char].get("th", "") if isinstance(base_chars[char], dict) else str(base_chars[char])
+            gender_val = base_chars[char].get("gender", "UNKNOWN") if isinstance(base_chars[char], dict) else "UNKNOWN"
+            role_val = base_chars[char].get("role", "Baseline") if isinstance(base_chars[char], dict) else "Baseline"
+        
+        glossary["Characters"][char] = {
+            "th": th_val,
+            "gender": gender_val,
+            "role": role_val,
+            "source": "Actors.json" if char in game_entities["actors"] else "Dialogue Tag"
         }
 
-        if is_target:
-            whitelist.append({
-                "name": tag,
-                "th": info["th"],
-                "gender": info["gender"],
-                "role_category": info["role_category"],
-                "dialogue_count": count,
-                "reason": info["reason"]
-            })
+    # 2. Items Section
+    base_items = baseline_glossary.get("Items", {})
+    for item in sorted(list(set(game_entities["items"]))):
+        th_val = base_items.get(item, {}).get("th", "") if isinstance(base_items.get(item), dict) else ""
+        glossary["Items"][item] = {
+            "th": th_val,
+            "category": "Item / Equipment"
+        }
 
-    # 1. บันทึก Master Glossary
-    os.makedirs(os.path.dirname(OUTPUT_GLOSSARY), exist_ok=True)
-    with open(OUTPUT_GLOSSARY, "w", encoding="utf-8") as f:
+    # 3. Places Section
+    base_places = baseline_glossary.get("Places", {})
+    for place in sorted(list(set(game_entities["places"]))):
+        th_val = base_places.get(place, {}).get("th", "") if isinstance(base_places.get(place), dict) else ""
+        glossary["Places"][place] = {
+            "th": th_val,
+            "category": "Map / Location"
+        }
+
+    # 4. Skills Section
+    base_skills = baseline_glossary.get("Skills", {})
+    for sk in sorted(list(set(game_entities["skills"]))):
+        th_val = base_skills.get(sk, {}).get("th", "") if isinstance(base_skills.get(sk), dict) else ""
+        glossary["Skills"][sk] = {
+            "th": th_val,
+            "category": "Skill"
+        }
+
+    # 5. System UI Section
+    base_sys = baseline_glossary.get("System_UI", {})
+    for term in sorted(list(set(game_entities["system"]))):
+        th_val = base_sys.get(term, {}).get("th", "") if isinstance(base_sys.get(term), dict) else ""
+        glossary["System_UI"][term] = {
+            "th": th_val,
+            "category": "System UI"
+        }
+
+    # บันทึกลง Target Output
+    os.makedirs(os.path.dirname(output_glossary), exist_ok=True)
+    with open(output_glossary, "w", encoding="utf-8") as f:
         json.dump(glossary, f, ensure_ascii=False, indent=2)
 
-    # 2. บันทึก Core Character Whitelist
-    with open(OUTPUT_WHITELIST, "w", encoding="utf-8") as f:
-        json.dump({
-            "_description": "Core Character Whitelist for Profile Generation (ADR-035 Compliance). Ambient NPCs have ZERO profile files.",
-            "total_qualified_characters": len(whitelist),
-            "characters": whitelist
-        }, f, ensure_ascii=False, indent=2)
-
-    print("\n" + "=" * 80)
-    print("                    BUILD SUMMARY & AUDIT TRAIL                     ")
     print("=" * 80)
-    print(f"📖 Master Glossary Characters Enrolled: {len(glossary['Characters'])} คน (ครอบคลุม 100%)")
-    print(f"🎯 Core Character Whitelist Qualified:   {len(whitelist)} คน (เฉพาะตัวสำคัญที่มีบทบาท)")
-    print("-" * 80)
-    print(f"{'Speaker Tag':<20} | {'Thai Translation':<22} | {'Role':<12} | {'Profile Status'}")
-    print("-" * 80)
-    for c in whitelist:
-        print(f"{c['name']:<20} | {c['th']:<22} | {c['role_category']:<12} | ✅ Create Profile")
-    for item in speakers_list:
-        tag = item["speaker_tag"]
-        if tag not in [w["name"] for w in whitelist]:
-            th = glossary["Characters"][tag]["th"]
-            print(f"{tag:<20} | {th:<22} | {'Ambient':<12} | ⛔ Clean Passthrough (No File)")
-    print("=" * 80)
-    print(f"💾 Saved Master Glossary:  {OUTPUT_GLOSSARY}")
-    print(f"💾 Saved Character Whitelist: {OUTPUT_WHITELIST}\n")
+    print(f"💾 Successfully Built Master Glossary: {output_glossary}\n")
+    return glossary
 
 
 if __name__ == "__main__":
-    build_glossary()
+    build_master_glossary()

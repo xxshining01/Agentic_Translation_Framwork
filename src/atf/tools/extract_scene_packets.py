@@ -20,10 +20,6 @@ from collections import Counter, defaultdict
 
 WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 MANIFEST_PATH = os.path.join(WORKSPACE_ROOT, "data", "project_manifest.json")
-OUTPUT_PACKETS = os.path.join(WORKSPACE_ROOT, "data", "tlas", "scene_packets.json")
-
-# Universal Tag Extractors (ตรวจจับโครงสร้าง Tag สากลของ Text Engine ต่างๆ)
-SYNTACTIC_SPEAKER_REGEX = re.compile(r'^[【\[]([^】\]\r\n]+)[】\]]|^<([^:>]+):?>')
 
 
 def load_manifest():
@@ -31,6 +27,16 @@ def load_manifest():
         with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
+
+
+def get_output_packets_path(manifest=None):
+    if manifest is None:
+        manifest = load_manifest()
+    target = manifest.get("output_scenes_json")
+    if not target:
+        tlas_dir = manifest.get("output_tlas_dir") or os.path.join(WORKSPACE_ROOT, "data", "tlas")
+        target = os.path.join(tlas_dir, "scene_packets.json")
+    return os.path.abspath(target)
 
 
 def detect_syntax_enclosure(text: str) -> str:
@@ -367,9 +373,10 @@ def extract_packets(csv_path: str, data_dir: str = None):
         sample_dlg = p["dialogues"][0]["clean_text"][:25].replace("\n", " ") if p["dialogues"] else ""
         print(f"{p['packet_id']:<25} | {rows_str:<12} | {spks_str[:24]:<24} | {sample_dlg}...")
 
-    # บันทึกไฟล์ JSON
-    os.makedirs(os.path.dirname(OUTPUT_PACKETS), exist_ok=True)
-    with open(OUTPUT_PACKETS, "w", encoding="utf-8") as f:
+    # บันทึกไฟล์ JSON ลง Target Deliverable ปลายทาง
+    output_path = get_output_packets_path()
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump({
             "framework": "Agentic Translation Framework (ATF) Universal Packetizer",
             "version": "2.0",
@@ -383,7 +390,7 @@ def extract_packets(csv_path: str, data_dir: str = None):
         }, f, ensure_ascii=False, indent=2)
 
     print("=" * 80)
-    print(f"💾 Saved Clean Universal Scene Packets: {OUTPUT_PACKETS}\n")
+    print(f"💾 Saved Clean Universal Scene Packets: {output_path}\n")
     return scene_packets
 
 

@@ -24,8 +24,23 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         pass
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-PROFILES_DIR = os.path.join(BASE_DIR, "data", "tlas", "profiles")
-MATRIX_FILE = os.path.join(BASE_DIR, "data", "tlas", "global_pronoun_matrix.json")
+MANIFEST_PATH = os.path.join(BASE_DIR, "data", "project_manifest.json")
+
+
+def load_manifest():
+    if os.path.exists(MANIFEST_PATH):
+        try:
+            with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+_manifest = load_manifest()
+tlas_dir = _manifest.get("output_tlas_dir") or os.path.join(BASE_DIR, "data", "tlas")
+PROFILES_DIR = _manifest.get("output_profiles_dir") or os.path.join(tlas_dir, "profiles")
+MATRIX_FILE = _manifest.get("output_pronoun_matrix_json") or os.path.join(tlas_dir, "global_pronoun_matrix.json")
 
 
 def infer_demographic_persona(pdata):
@@ -60,8 +75,8 @@ def clean_profiles_and_enrich():
     if not profile_files:
         print("[*] No profiles found in profiles directory. Synthesizing clean profiles from whitelist...")
         try:
-            from atf.tools.synthesize_clean_profiles import synthesize_clean_profiles
-            synthesize_clean_profiles()
+            from atf.tools.analyze_character_profiles import analyze_character_profiles
+            analyze_character_profiles()
             profile_files = glob.glob(os.path.join(PROFILES_DIR, "*.json"))
         except Exception as e:
             print(f"[!] Warning: Could not auto-synthesize profiles: {e}")

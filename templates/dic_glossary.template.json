@@ -1,0 +1,17 @@
+{
+  "_metadata": {
+    "version": "1.0",
+    "description": "ATF Game-Specific Jargon, Slang & Custom Dictionary Template",
+    "target_language": "th",
+    "notes": "Define recurring world lore terms, catchphrases, slang, and cultural idioms specific to the game."
+  },
+  "dictionary": {
+    "SAMPLE_TERM": {
+      "ja": "見本用語",
+      "th": "คำแปลตัวอย่าง",
+      "category": "Lore / Slang / Idiom / Catchphrase",
+      "context": "คำอธิบายบริบทการใช้งาน",
+      "prohibited": ["คำแปลต้องห้าม"]
+    }
+  }
+}
