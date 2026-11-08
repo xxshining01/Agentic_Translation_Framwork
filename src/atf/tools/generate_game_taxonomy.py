@@ -85,3 +85,4 @@ def generate_game_taxonomy():
 
 if __name__ == "__main__":
     generate_game_taxonomy()
+

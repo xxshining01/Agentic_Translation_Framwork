@@ -106,15 +106,21 @@ def extract_game_entities(data_dir: str) -> Dict[str, List[str]]:
 
 
 def extract_csv_speakers(csv_path: str) -> List[str]:
-    """สกัด Distinct Speakers จาก Speaker Tag ใน CSV"""
+    """สกัด Distinct Speakers จาก Speaker Tag ใน CSV (ป้องกันการอ่านชนคอลัมน์ Note)"""
     speakers = set()
     if not csv_path or not os.path.exists(csv_path):
         return list(speakers)
 
     tag_regex = re.compile(r'^[【\[]([^】\]\r\n]+)[】\]]|^<([^:>]+):?>')
     with open(csv_path, "r", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        for row in reader:
+        reader = list(csv.reader(f))
+        if not reader:
+            return list(speakers)
+        
+        header_lower = [c.strip().lower() for c in reader[0]]
+        speaker_idx = header_lower.index("speaker") if "speaker" in header_lower else -1
+
+        for row in reader[1:]:
             if not row or not row[0].strip():
                 continue
             text = row[0].strip()
@@ -123,9 +129,10 @@ def extract_csv_speakers(csv_path: str) -> List[str]:
                 spk = m.group(1) or m.group(2)
                 if spk and spk.strip():
                     speakers.add(spk.strip())
-            # ถ้ามีคอลัมน์ Speaker ชัดเจน (เช่น index 4 หรือ 6)
-            if len(row) > 4 and row[4] and row[4].strip() not in ["None", "Speaker", ""]:
-                speakers.add(row[4].strip())
+            elif speaker_idx != -1 and len(row) > speaker_idx:
+                spk_val = row[speaker_idx].strip()
+                if spk_val and spk_val not in ["None", "Speaker", ""]:
+                    speakers.add(spk_val)
     return sorted(list(speakers))
 
 

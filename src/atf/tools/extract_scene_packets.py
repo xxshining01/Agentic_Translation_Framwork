@@ -39,6 +39,10 @@ def get_output_packets_path(manifest=None):
     return os.path.abspath(target)
 
 
+# Universal Tag Extractors (ตรวจจับโครงสร้าง Tag สากลของ Text Engine ต่างๆ)
+SYNTACTIC_SPEAKER_REGEX = re.compile(r'^[【\[]([^】\]\r\n]+)[】\]]|^<([^:>]+):?>')
+
+
 def detect_syntax_enclosure(text: str) -> str:
     """ตรวจจับว่าข้อความถูกครอบด้วยเครื่องหมายใด เพื่อส่งเป็นเบาะแสโครงสร้างให้ LLM"""
     s = text.strip()

@@ -44,15 +44,21 @@ def load_json_safe(filepath: str) -> Any:
 
 
 def count_speaker_dialogues(csv_path: str) -> Counter:
-    """นับจำนวนประโยคพูดของตัวละครแต่ละตัวจาก CSV"""
+    """นับจำนวนประโยคพูดของตัวละครแต่ละตัวจาก CSV (ป้องกันการอ่านชนคอลัมน์ Note)"""
     counts = Counter()
     if not csv_path or not os.path.exists(csv_path):
         return counts
 
     tag_regex = re.compile(r'^[【\[]([^】\]\r\n]+)[】\]]|^<([^:>]+):?>')
     with open(csv_path, "r", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        for row in reader:
+        reader = list(csv.reader(f))
+        if not reader:
+            return counts
+
+        header_lower = [c.strip().lower() for c in reader[0]]
+        speaker_idx = header_lower.index("speaker") if "speaker" in header_lower else -1
+
+        for row in reader[1:]:
             if not row or not row[0].strip():
                 continue
             text = row[0].strip()
@@ -61,8 +67,10 @@ def count_speaker_dialogues(csv_path: str) -> Counter:
                 spk = m.group(1) or m.group(2)
                 if spk and spk.strip():
                     counts[spk.strip()] += 1
-            elif len(row) > 4 and row[4] and row[4].strip() not in ["None", "Speaker", ""]:
-                counts[row[4].strip()] += 1
+            elif speaker_idx != -1 and len(row) > speaker_idx:
+                spk_val = row[speaker_idx].strip()
+                if spk_val and spk_val not in ["None", "Speaker", ""]:
+                    counts[spk_val] += 1
 
     return counts
 
@@ -180,3 +188,4 @@ def build_character_whitelist():
 
 if __name__ == "__main__":
     build_character_whitelist()
+

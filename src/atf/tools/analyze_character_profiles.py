@@ -282,3 +282,4 @@ def analyze_character_profiles():
 
 if __name__ == "__main__":
     analyze_character_profiles()
+

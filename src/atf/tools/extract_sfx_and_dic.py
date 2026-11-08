@@ -154,3 +154,4 @@ def extract_sfx_and_dic():
 
 if __name__ == "__main__":
     extract_sfx_and_dic()
+
