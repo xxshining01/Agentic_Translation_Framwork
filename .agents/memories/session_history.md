@@ -1036,3 +1036,21 @@
 - **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
   - `src/atf/tools/chatgpt_translator_runner.py` (Untranslated Row Engine Fixed)
   - `atf.py` (Port 8765 Alignment)
+
+### [2026-11-08 18:40] Session 32: Stage 3d Live ChatGPT Bridge Port 8765 Alignment
+- **1. สิ่งที่ทำ (Actions Executed):**
+  - **เชื่อมต่อ Stage 3d (`analyze_character_profiles.py`) เข้าสู่ Live ChatGPT Bridge พอร์ต 8765:**
+    - แก้ไข `BRIDGE_URL` เป็น `http://127.0.0.1:8765` ตรงตามพอร์ตจริงของ `chatgpt_bridge_server.py` และ Userscript
+    - รื้อฟื้นฟังก์ชัน `wait_for_bridge_ready()` และ `call_chatgpt_api()`: ดึงตัวอย่างบทสนทนาจริงและรายชื่อตัวละครร่วมฉาก ส่งเป็น Prompt ให้ ChatGPT บนเบราว์เซอร์ทำการวิเคราะห์อัตลักษณ์และ Pairwise Relationships
+    - ปรับปรุงการสกัดผลลัพธ์ JSON จาก ChatGPT และจัดโครงสร้างลงสู่ `base_state.relationships`
+  - **Commit & Push ขึ้น Git:** Commit `d16722e` ขึ้น GitHub `origin/main`
+- **2. แนวคิดเชิงสถาปัตยกรรม (Architectural Rationale):**
+  - **Accurate Transport Port Binding:** ในกระบวนการเตรียมข้อมูลขั้นที่ต้องใช้ LLM (Stage 3d) ระบบต้องชี้ไปยังพอร์ตจริง (8765) ที่ Bridge กำลังทำงานอยู่ เพื่อให้คิวงานถูกส่งต่อไปยัง Tampermonkey Userscript บนหน้าเว็บ ChatGPT ได้อย่างถูกต้อง 100%
+- **3. ความคืบหน้า (Progress & Milestones):**
+  - บรรลุการผูกโยง Stage 3d เข้ากับ Live Web Bridge พอร์ต 8765
+- **4. ผลการทดสอบ (Verification & Test Results):**
+  - ทดสอบ `http://127.0.0.1:8765/bridge/status`: ได้รับสถานะ `online` และ `userscript_connected: True` ยืนยันว่าหน้าเว็บ ChatGPT พร้อมรับงาน
+- **5. สิ่งที่ต้องแก้ไข / อุปสรรค (Remaining Blockers / Next Fixes):**
+  - ผู้ใช้สั่งรัน `python atf.py prepare-all` (หรือ `python atf.py prepare-profiles`) ใน Terminal เพื่อเริ่มให้ ChatGPT วิเคราะห์ตัวละครทั้ง 10 ตัวผ่านหน้าเว็บจริง
+- **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
+  - `src/atf/tools/analyze_character_profiles.py` (Live Bridge Connected on Port 8765)
