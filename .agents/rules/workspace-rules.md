@@ -52,4 +52,15 @@ glob: "*"
   2. **Zero Modification of Game Internals:** ข้อมูลใดๆ ที่เป็นกลไกการควบคุมเกมเบื้องหลังที่ผู้เล่นมองไม่เห็น (`Displayable == 'No'`) เช่น โค้ดคำสั่ง (Script Code), ตัวแปร (Variables), สวิตช์ (Switches), ชื่อ Event ภายใน, พารามิเตอร์ระบบ หรือ Developer Comments ต้องคงสภาพต้นฉบับภาษาเดิม 100% ห้ามแปลเด็ดขาด เพื่อป้องกันปัญหาเกมแครช (Zero Game Crash)
   3. **Plugin Text Localization Scope:** สำหรับปลั๊กอิน (Plugin Texts / Parameters) ให้สกัดและแปลเฉพาะข้อความในส่วนติดต่อผู้ใช้ (UI Strings, Menu Text, Command Labels, Displayed Picture Text) ที่แสดงผลบนหน้าจอให้ผู้เล่นเห็นเท่านั้น พารามิเตอร์เชิงเทคนิค ตัวแปร และฟังก์ชันภายในปลั๊กอินห้ามแตะต้องเด็ดขาด
 
+## 8. Rule Compliance Pre-Delivery Verification & Audit Reporting (การตรวจสอบและรายงานการปฏิบัติตามกฎทุกข้อ)
+- **[RULE_PRE_DELIVERY_COMPLIANCE_AUDIT]**:
+  1. **Mandatory Self-Audit Before Reporting:** ก่อนส่งมอบงานหรือรายงานผลลัพธ์ให้ผู้ใช้ทุกครั้ง AI Assistant จะต้องทำการตรวจสอบตนเองซ้ำ (Self-Audit) เทียบกับกฎเหล็กทุกข้อใน `.agents/rules/` และ `.agents/AGENTS.md` อย่างเข้มงวด 100%
+  2. **Explicit Compliance Section in Response:** ในข้อความรายงานสรุปผลงาน ต้องมีส่วน **"รายงานการตรวจสอบความสอดคล้องกับกฎของระบบ (Rule Compliance Audit Report)"** อธิบายอย่างเป็นรูปธรรมว่าทำไมโค้ดหรือการกระทำในแต่ละส่วนถึงไม่ละเมิดกฎ:
+     - ทำไมถึงสอดคล้องกับ `[RULE_ZERO_HARDCODE]` (ไม่มีการฮาร์ดโค้ดชื่อตัวละคร, เพศ, หรือค่าเฉพาะเกมในซอร์สโค้ด)
+     - ทำไมถึงสอดคล้องกับ `[RULE_UNIVERSAL_PARADIGM]` (ทำงานได้กับทุกเกมแบบ Plug-and-Play ขับเคลื่อนจาก Data บน Disk เท่านั้น)
+     - ทำไมถึงสอดคล้องกับ `[RULE_SYSTEM_PRINCIPLES]` (มี State Persistence Checkpoint, Adaptive Resilience, No Timeout, No Skip)
+     - ทำไมถึงสอดคล้องกับ `[RULE_USER_TERMINAL_ONLY]` (เตรียมคำสั่งรันให้ผู้ใช้สั่งเอง ทั้ง PowerShell และ CMD)
+     - ทำไมถึงสอดคล้องกับ `[RULE_DOC_ADHERENCE]` & `[RULE_MANDATORY_VERIFICATION]` (ตรวจสอบไฟล์จริงบนดิสก์และ Schema ครบถ้วน)
+
+
 

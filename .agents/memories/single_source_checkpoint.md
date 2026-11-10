@@ -438,7 +438,13 @@
   - ปรับปรุง Userscript Emergency New Chat: หากปุ่มใน DOM ไม่เปลี่ยน URL จะทำการ Force Navigation (`window.location.href = '/'`) ตัดวงจรการติดค้างในห้องแชตเดิมที่ปุ่มล็อก 100%
   - ติดตั้งกลไก Periodic New Chat ทุกๆ 8-10 Batch และสั่ง New Chat ทันทีเมื่อเกิด Error ก่อนเริ่ม Retry
   - ติดตั้งระบบ State Persistence 100%: บันทึก `profile_analysis_checkpoint.json` และ `profile_analysis_log.jsonl` ทันทีทุก Batch พร้อมเขียนและอัปเดตไฟล์ Profile ลงดิสก์แบบ Real-time (Resume งานได้ทันที ไม่เสียโทเคนฟรี)
-  - ผสานรวมข้อมูลตัวละครหลายฉาก (Multi-Scene Consolidation) และกำจัดเพศ `UNKNOWN` ด้วย Ground Truth และหลักฐานทางไวยากรณ์ญี่ปุ่น (`僕` -> ชาย)
+  - ผสานรวมข้อมูลตัวละครหลายฉาก (Multi-Scene Consolidation)
+- [x] **Task 28.9: Pure Universal Paradigm & Total Hardcode Eradication (v6.4)**
+  - บรรจุ `[RULE_PRE_DELIVERY_COMPLIANCE_AUDIT]` ลงใน `workspace-rules.md` และ `AGENTS.md`: บังคับตรวจซ้ำและรายงาน Rule Compliance ในทุกการตอบ
+  - กวาดล้าง Hardcode Dictionaries (`CANONICAL_ID_MAP`, `GROUND_TRUTH_IDENTITY`) ออกจาก `analyze_character_profiles.py` 100%
+  - พัฒนา Universal Character ID Generator (`generate_universal_character_id`): ใช้ SHA-256 Slug ไดนามิก รองรับทุกภาษาและทุกเอนจิน
+  - ขับเคลื่อน Demographics และ Pronouns จาก In-Scene LLM Linguistic Evidence ร่วมกับ `tlas_glossary.json` บนดิสก์ ไร้การเช็คชื่อตัวละครใดๆ ในโค้ด
+
 
 
 

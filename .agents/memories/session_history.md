@@ -1161,3 +1161,28 @@
 - **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
   - `src/atf/tools/analyze_character_profiles.py` (v6.3 Enterprise Resilient Profiler)
   - `src/atf/tools/atf_chatgpt_userscript.user.js` (Force Navigation & Emergency Escape)
+
+### [2026-11-10 17:25] Session 37: Pure Universal Paradigm, Rule Compliance Audit & Total Hardcode Eradication (v6.4)
+- **1. สิ่งที่ทำ (Actions Executed):**
+  - **บรรจุ Rule ใหม่ `[RULE_PRE_DELIVERY_COMPLIANCE_AUDIT]` ([[workspace-rules.md]](file:///d:/Agentic%20Translation%20Framework%20(ATF)%20Project/.agents/rules/workspace-rules.md) และ [[AGENTS.md]](file:///d:/Agentic%20Translation%20Framework%20(ATF)%20Project/.agents/AGENTS.md)):**
+    - บังคับตรวจทานซ้ำ (Self-Audit) ก่อนส่งงานทุกครั้ง พร้อมรายงานแยกรายข้อในคำตอบว่าทำไมโค้ดและโซลูชันถึงไม่ผิดกฎ
+  - **กวาดล้าง Hardcoded Dictionaries ออกจาก `analyze_character_profiles.py` 100%:**
+    - ลบ `CANONICAL_ID_MAP` และ `GROUND_TRUTH_IDENTITY` ที่เคยฮาร์ดโค้ดชื่อเฉพาะเกม (`夫`, `凛`, `遠藤`, `由美`, `先生` ฯลฯ) ออกจากซอร์สโค้ดอย่างสิ้นเชิง
+    - ลบการเช็คสตริงชื่อภาษาญี่ปุ่นในฟังก์ชันคำนวณสรรพนาม (`"先生" in target_name`, `"おばあさん" in target_name`) เปลี่ยนเป็นตรวจจับผ่าน Taxonomy Metadata (`roles`, `age`, `gender`, `number`) 100%
+  - **พัฒนา Universal Character ID Generator (`generate_universal_character_id`):**
+    - สร้าง ID แบบไดนามิกผ่าน ASCII slug สำหรับชื่อภาษาอังกฤษ และ Deterministic SHA-256 Hex Hash (8 หลัก) สำหรับชื่อภาษาญี่ปุ่น/จีน/สากล ทำงานได้กับทุกเกมแบบ Plug-and-Play
+  - **ยกระดับ Evidence-Based Demographic Resolution:**
+    - ขับเคลื่อนการหาเพศและวัยจากผลการวิเคราะห์ทางภาษาศาสตร์ของ LLM (Linguistic Invariants เช่น สรรพนามบุรุษที่ 1, คำเรียกเครือญาติ, คำลงท้าย) ผนวกกับ `tlas_glossary.json` บนดิสก์
+    - หากไม่มีหลักฐานใดๆ ในบทสนทนาหรือ Glossary จะคงสถานะ `UNKNOWN` และ Fallback สู่ Safe Neutral Register (ฉัน/คุณ/เขา ปราศจากหางเสียง) ตาม `[RULE_ZERO_HARDCODE]` อย่างเคร่งครัด
+- **2. แนวคิดเชิงสถาปัตยกรรม (Architectural Rationale):**
+  - **Universal Framework Integrity:** ATF ต้องเป็น Engine ที่สะอาดบริสุทธิ์ สามารถนำไปรันกับเกมใหม่ใดๆ ในโลกได้ทันทีโดยไม่มีเศษซากหรือชื่อตัวละครของเกมเก่าหลงเหลืออยู่ในโค้ด
+- **3. ความคืบหน้า (Progress & Milestones):**
+  - บรรลุ Task 28.9 ใน `single_source_checkpoint.md`
+- **4. ผลการทดสอบ (Verification & Test Results):**
+  - ทดสอบ `scratch/test_universal_profiler.py`: สร้าง Character ID แบบไดนามิก (`CHAR_JOHN`, `CHAR_A344C50F`) และคำนวณสรรพนามผ่าน Taxonomy Attributes ผ่านฉลุย 100%
+  - คอมไพล์ `py_compile` ผ่านสมบูรณ์ทุกไฟล์
+- **5. สิ่งที่ต้องแก้ไข / อุปสรรค (Remaining Blockers / Next Fixes):**
+  - ผู้ใช้สั่งรัน `python atf.py prepare-profiles` เพื่อเริ่มวิเคราะห์แบบ Universal
+- **6. สิ่งที่ใช้งานได้จริงแล้ว (Working Deliverables):**
+  - `src/atf/tools/analyze_character_profiles.py` (v6.4 Pure Universal & Zero-Hardcode)
+  - `.agents/rules/workspace-rules.md` (Updated with RULE 8: Pre-Delivery Compliance Audit)

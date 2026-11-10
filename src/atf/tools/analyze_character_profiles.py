@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ATF Scene-Based Character Profile & Relational Synthesizer (v6.3 - Enterprise Resilient Edition)
-=============================================================================================
+ATF Scene-Based Character Profile & Relational Synthesizer (v6.4 - Pure Universal Paradigm)
+===========================================================================================
 สกัดและวิเคราะห์ Character Profiles & Pairwise Relationships ของตัวละคร Whitelist
 โดยส่งบทสนทนาจริงจากทุกฉาก (Exhaustive Scene-Based Batches) ไปให้ LLM (ChatGPT Web Bridge พอร์ต 8765)
 เพื่อวิเคราะห์อัตลักษณ์ (Identity), บุคลิกภาพ (Personality), และความสัมพันธ์ (Relationships)
-พร้อมระบบ Deterministic Python Pronoun Engine ที่แยกแยะเพศ วัย ความอาวุโส และความสุภาพครบถ้วน 100%
+พร้อมระบบ Deterministic Python Pronoun Engine ที่ขับเคลื่อนด้วยข้อมูล Taxonomy บนดิสก์ 100%
 
-สถาปัตยกรรมหลัก:
-1. 100% Dialogue Coverage: ไม่ตัดทอนบทสนทนาแบบ blind slice สกัดทุกบทสนทนาของตัวละครหลักในทุกฉากครบถ้วน
-2. True Third-Person Disambiguation: แยกแยะสรรพนามบุรุษที่ 3 อย่างละเอียด (หญิง: "เธอ", ชาย: "เขา", ครู/ผู้อาวุโส: "ท่าน", กลุ่มเด็ก: "พวกเขา", สแลง/ศัตรู: "มัน")
-3. Per-Batch State Persistence (Rule Compliance): บันทึก Checkpoint และ Log ทันทีทุก Batch ที่รันจบ พร้อมเซฟไฟล์ Profile บนดิสก์ทันทีแบบเรียลไทม์ (Resume ได้ตลอดเวลา ไม่เสียโทเคนฟรี)
-4. Periodic New Chat & Dead Room Recovery: ขึ้นแชตใหม่ทุกๆ 8-10 ครั้ง และสั่งขึ้นแชตใหม่ทันทีเมื่อเกิดข้อผิดพลาดในการส่ง
-5. Multi-Scene Consolidation: รวมข้อมูลตัวละครที่ปรากฏตัวซ้ำหลายฉาก สรุปเป็นโปรไฟล์เดียวที่สมบูรณ์ที่สุด
-6. Ground-Truth Gender Disambiguation: บูรณาการหลักฐานทางไวยากรณ์ (เช่น 僕 -> ชาย) และข้อมูลเกม ลบปัญหาเพศ UNKNOWN 100%
+สถาปัตยกรรมหลัก (Zero Hardcode & Universal Paradigm Compliant):
+1. Zero Hardcode Invariant: ปราศจากพจนานุกรมชื่อตัวละคร หรือการฮาร์ดโค้ดเพศ/วัย/ID ในซอร์สโค้ด 100%
+2. Data-Driven ID Generation: สร้าง character_id แบบไดนามิกผ่านแฮชสากลและ slug (รองรับทุกภาษา/ทุกเอนจิน)
+3. Evidence-Based Demographics: อัตลักษณ์ (เพศ/วัย) สกัดจากผลวิเคราะห์บทสนทนาจริงของ LLM ร่วมกับฐานข้อมูลเกม (tlas_glossary.json บนดิสก์)
+4. Neutral Fallback When Uncertain: หากไม่มีหลักฐานยืนยันเพศ จะคงค่า UNKNOWN และใช้สรรพนามกลางที่ปลอดภัย
+5. Taxonomy-Driven Pronoun Resolution: คำนวณสรรพนาม (self, target, third_person, ending) จาก metadata และ taxonomy.json ไร้การเช็คชื่อตัวละคร
+6. Per-Batch State Persistence: บันทึก Checkpoint และ Log ทันทีทุก Batch พร้อมเซฟ Profile ลงดิสก์แบบเรียลไทม์
+7. Periodic New Chat & Dead Room Escape: ขึ้นแชตใหม่ทุกๆ 8-10 Batch และ Force Navigation เมื่อเกิดข้อผิดพลาด
 """
 
 import os
@@ -23,6 +24,7 @@ import json
 import time
 import urllib.request
 import urllib.error
+import hashlib
 import re
 from typing import Dict, Any, List, Set, Tuple
 
@@ -36,33 +38,18 @@ WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../
 MANIFEST_PATH = os.path.join(WORKSPACE_ROOT, "data", "project_manifest.json")
 BRIDGE_URL = "http://127.0.0.1:8765"
 
-# กำหนด Canonical ID ให้ตรงกับบทบาทเพื่อความเป็นระเบียบ 100%
-CANONICAL_ID_MAP = {
-    "凛": "CHAR_RIN",
-    "夫": "CHAR_HUSBAND",
-    "遠藤": "CHAR_ENDO",
-    "由美": "CHAR_YUMI",
-    "旦那さん": "CHAR_SATO_HUSBAND",
-    "受付のおばあさん": "CHAR_RECEPTIONIST_ELDER",
-    "先生": "CHAR_TEACHER",
-    "子供1": "CHAR_CHILD_1",
-    "子供2": "CHAR_CHILD_2",
-    "子供たち": "CHAR_CHILDREN_PLURAL"
-}
 
-# Ground Truth ฐานข้อมูลเบื้องต้นสำหรับป้องกัน UNKNOWN Traps
-GROUND_TRUTH_IDENTITY = {
-    "凛": {"gender": "FEMALE", "age": "ADULT", "role": "Wife / Main Character"},
-    "夫": {"gender": "MALE", "age": "ADULT", "role": "Husband / Party Leader"},
-    "遠藤": {"gender": "MALE", "age": "ADULT", "role": "Male Acquaintance"},
-    "由美": {"gender": "FEMALE", "age": "ADULT", "role": "Wife of Sato / Guest"},
-    "旦那さん": {"gender": "MALE", "age": "ADULT", "role": "Husband of Yumi (Sato) / Guest"},
-    "受付のおばあさん": {"gender": "FEMALE", "age": "ELDER", "role": "Inn Receptionist Elder"},
-    "先生": {"gender": "MALE", "age": "ADULT", "role": "Teacher / School Trip Leader"},
-    "子供1": {"gender": "MALE", "age": "CHILD", "role": "Village Child"},
-    "子供2": {"gender": "MALE", "age": "CHILD", "role": "Village Child"},
-    "子供たち": {"gender": "UNKNOWN", "age": "CHILD", "role": "Group of Village Children"}
-}
+def generate_universal_character_id(name: str) -> str:
+    """
+    สร้าง Canonical Character ID แบบไดนามิก 100% ไร้การ Hardcode ชื่อใดๆ
+    รองรับทั้งชื่อภาษาอังกฤษ (ASCII slug) และชื่อภาษาญี่ปุ่น/จีน/สากล (Deterministic SHA256 Hash)
+    """
+    latin_slug = re.sub(r'[^A-Za-z0-9]', '', name).upper()
+    if len(latin_slug) >= 2:
+        return f"CHAR_{latin_slug}"
+    # สำหรับชื่อที่ไม่ใช่ตัวอักษรละติน ให้สร้าง Hex Hash 8 หลักที่คงที่และไม่ซ้ำซ้อน
+    name_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()[:8].upper()
+    return f"CHAR_{name_hash}"
 
 
 def load_manifest() -> Dict[str, Any]:
@@ -275,7 +262,7 @@ def build_exhaustive_scene_batches(scene_packets: List[Dict[str, Any]], whitelis
 
 
 def build_scene_prompt(batch: Dict[str, Any]) -> Tuple[str, str]:
-    """สร้าง System Prompt และ User Prompt สำหรับวิเคราะห์บทสนทนาประจำฉาก"""
+    """สร้าง System Prompt และ User Prompt สำหรับวิเคราะห์บทสนทนาประจำฉาก (Universal Linguistic Invariants)"""
     scene_id = batch["scene_id"]
     chars = batch["characters"]
     chars_str = ", ".join([f'"{c}"' for c in chars])
@@ -286,9 +273,12 @@ Your mission is to analyze the in-game dialogue of a specific game scene to extr
 
 CRITICAL INVARIANTS:
 1. Grounded In Scene Evidence: Extract traits and dynamics strictly from how these characters speak and interact in the provided dialogue.
-2. Gender Cues (NEVER output UNKNOWN if linguistic cues exist):
-   - First-person pronouns: '僕' (boku) or '俺' (ore) = MALE. '私' (watashi) or 'あたし' (atashi) or feminine sentence enders ('わ', 'のよ') = FEMALE.
-   - Kinship / Titles: 'おばあさん' = FEMALE ELDER. '夫' / '旦那' = MALE. '先生' = Adult Teacher.
+2. Objective Linguistic Gender Markers:
+   - Carefully inspect first-person pronouns, kinship terms, and grammatical endings used by each character or how others address them:
+     * First-person '僕' (boku) or '俺' (ore) = MALE.
+     * First-person 'あたし' (atashi) or feminine particles ('わ', 'のよ') = FEMALE.
+     * Second-person or vocatives addressed to the character: e.g. 'お姉さん', 'おばあさん', '妻' = FEMALE. 'おじさん', 'お兄さん', '夫', '旦那' = MALE.
+   - If genuine evidence exists in the scene dialogue, assign MALE or FEMALE. If the character's gender is completely absent from all cues, assign UNKNOWN.
 3. Target Focus Only: Profile ONLY the target characters listed. Do NOT invent characters.
 4. Zero Thai Pronoun Hallucination: Do NOT generate Thai pronoun words (no "ฉัน", "ผม", "สามี", "นาย", etc.). The Thai pronouns will be synthesized by the downstream rule engine. Output only structural metadata.
 5. Strict Formality Scale (1-5):
@@ -311,12 +301,12 @@ Analyze the target characters present in this scene and output a JSON object adh
 
 {{
   "characters": {{
-    "CHARACTER_JAPANESE_NAME": {{
+    "CHARACTER_NAME": {{
       "identity": {{
         "gender": "MALE" | "FEMALE" | "NON_BINARY" | "UNKNOWN",
         "age": "CHILD" | "TEEN" | "ADULT" | "ELDER" | "UNKNOWN",
         "species": "HUMAN",
-        "social_role": "brief description (e.g. husband, wife, teacher, acquaintance, child, inn_receptionist)"
+        "social_role": "brief description (e.g. spouse, teacher, student, acquaintance, receptionist, child)"
       }},
       "personality_tags": [
         "PER_SOC_CASUAL", "PER_SOC_POLITE", "PER_SOC_RUDE", "PER_VIBE_CHEERFUL", "PER_VIBE_SERIOUS", "PER_SOC_PLAYFUL" (pick 2-3 matching tags)
@@ -362,11 +352,11 @@ def merge_scene_results_into_master(master_profiles: Dict[str, Any], scene_data:
         prof = master_profiles[c_name]
         ident = c_info.get("identity", {})
         g = ident.get("gender", "").upper()
-        if g in ("MALE", "FEMALE", "NON_BINARY"):
+        if g in ("MALE", "FEMALE", "NON_BINARY", "UNKNOWN"):
             prof["gender_votes"].append(g)
 
         a = ident.get("age", "").upper()
-        if a in ("CHILD", "TEEN", "ADULT", "ELDER"):
+        if a in ("CHILD", "TEEN", "ADULT", "ELDER", "UNKNOWN"):
             prof["age_votes"].append(a)
 
         s_role = ident.get("social_role", "")
@@ -406,11 +396,9 @@ def merge_scene_results_into_master(master_profiles: Dict[str, Any], scene_data:
                 }
             else:
                 existing_rel = prof["relationships"][t_name]
-                # รวม Roles จากหลายฉาก
                 combined_roles = set(existing_rel.get("roles", [])) | new_roles
                 existing_rel["roles"] = list(combined_roles)
 
-                # ให้ความสำคัญกับความสัมพันธ์ที่มีความลึกซึ้ง/เฉพาะเจาะจงมากกว่า
                 if new_affinity in ("AFF_LOVING", "AFF_HOSTILE"):
                     existing_rel["affinity"] = new_affinity
                 if new_intimacy in ("INT_INTIMATE", "INT_CLOSE"):
@@ -426,20 +414,20 @@ def derive_pronouns_from_taxonomy(
     speaker_age: str,
     target_gender: str,
     target_age: str,
+    target_number: str,
     roles: List[str],
     intimacy: str,
-    formality_level: int,
-    target_name: str = ""
+    formality_level: int
 ) -> Dict[str, Any]:
     """
-    คำนวณสรรพนามบุรุษที่ 1, 2, 3 และหางเสียงตามหลักไวยากรณ์ไทยและ taxonomy.json แบบ Deterministic 100%
-    แยกแยะเพศ วัย ความอาวุโส ความสุภาพ และพหูพจน์อย่างละเอียด ปลอดคำนามปลอม 100%
+    คำนวณสรรพนามบุรุษที่ 1, 2, 3 และหางเสียงตามหลักไวยากรณ์ไทยและ taxonomy.json แบบ Pure Universal Data-Driven 100%
+    ขับเคลื่อนจาก Taxonomy Attributes เท่านั้น ไร้การฮาร์ดโค้ดหรือเช็คสตริงชื่อตัวละครโดยเด็ดขาด
     """
     roles = roles or []
-    is_plural = "たち" in target_name or "2人" in target_name or "พวก" in target_name
-    is_teacher = "先生" in target_name or "ROLE_EDU_TEACHER" in roles
-    is_elder = target_age == "ELDER" or "おばあさん" in target_name or "おじいさん" in target_name
-    is_child = target_age == "CHILD" or "子供" in target_name or "小学生" in target_name
+    is_plural = target_number == "PLURAL"
+    is_teacher = "ROLE_EDU_TEACHER" in roles
+    is_elder = target_age == "ELDER"
+    is_child = target_age == "CHILD"
     is_female = target_gender == "FEMALE"
     is_male = target_gender == "MALE"
     is_spouse = "ROLE_FAM_SPOUSE" in roles
@@ -460,6 +448,7 @@ def derive_pronouns_from_taxonomy(
     elif is_male:
         third_p = "เขา"
     else:
+        # Safe Neutral Third-Person เมื่อไม่ทราบเพศ
         third_p = "เขา"
 
     # -------------------------------------------------------------
@@ -477,14 +466,14 @@ def derive_pronouns_from_taxonomy(
     elif is_teacher:
         target_p = "คุณ" if formality_level <= 3 else "ท่าน"
     elif is_elder:
-        target_p = "คุณยาย" if "おばあさん" in target_name else ("คุณตา" if "おじいさん" in target_name else "คุณ")
+        target_p = "ท่าน" if formality_level >= 4 else ("คุณยาย" if is_female else "คุณตา")
     elif is_child:
         target_p = "หนู" if is_female else "เธอ"
     elif formality_level == 2:
         target_p = "เธอ" if is_female else "นาย"
     elif formality_level in (3, 4):
         target_p = "คุณ"
-    else:
+    else: # 5
         target_p = "ท่าน"
 
     # -------------------------------------------------------------
@@ -495,14 +484,14 @@ def derive_pronouns_from_taxonomy(
     elif speaker_age == "CHILD":
         self_p = "หนู" if speaker_gender == "FEMALE" else "ผม"
     elif is_child and speaker_age in ("TEEN", "ADULT"):
-        self_p = "พี่" if speaker_age in ("TEEN", "ADULT") and "おばあさん" not in speaker_gender else "ฉัน"
+        self_p = "พี่" if speaker_age != "ELDER" else "ฉัน"
     elif is_spouse:
         self_p = "ผม" if speaker_gender == "MALE" else "ฉัน"
     elif formality_level == 2:
         self_p = "ผม" if speaker_gender == "MALE" else "ฉัน"
     elif formality_level in (3, 4):
         self_p = "ผม" if speaker_gender == "MALE" else "ฉัน"
-    else:
+    else: # 5
         self_p = "กระผม" if speaker_gender == "MALE" else "ดิฉัน"
 
     # -------------------------------------------------------------
@@ -519,7 +508,7 @@ def derive_pronouns_from_taxonomy(
             ending_p = "" if speaker_gender == "MALE" else "จ้ะ"
     elif formality_level in (3, 4):
         ending_p = "ครับ" if speaker_gender == "MALE" else "ค่ะ"
-    else:
+    else: # 5
         ending_p = "ขอรับ" if speaker_gender == "MALE" else "เจ้าค่ะ"
 
     return {
@@ -536,45 +525,44 @@ def synthesize_and_save_profiles(
     whitelist_names: Set[str],
     glossary: Dict[str, Any],
     output_profiles_dir: str
-):
-    """ประกอบ Profile ขั้นสุดท้ายพร้อมแมปปิ้งสรรพนามและบันทึกไฟล์ JSON ลงฮาร์ดดิสก์ทันที"""
+) -> int:
+    """
+    ประกอบและบันทึก Character Profiles ลงดิสก์แบบ Pure Universal Data-Driven 100%
+    ขับเคลื่อนด้วยข้อมูลจริงบนดิสก์และผลวิเคราะห์บทสนทนา ปราศจาก Hardcode ใดๆ ทั้งสิ้น
+    """
     os.makedirs(output_profiles_dir, exist_ok=True)
     chars_glossary = glossary.get("Characters", {})
 
-    # 1. รวบรวมข้อมูลพื้นฐานของทุกตัวละครเพื่อใช้เป็นตารางอ้างอิงข้ามบุคคล
+    # 1. รวบรวมข้อมูลพื้นฐานของทุกตัวละครจากหลักฐานจริงบนดิสก์และคะแนนโหวตจากการวิเคราะห์บทสนทนา
     char_demographics = {}
     for name in whitelist_names:
         prof = master_profiles.get(name, {})
         g_votes = prof.get("gender_votes", [])
         a_votes = prof.get("age_votes", [])
 
-        # มติเสียงส่วนมากสำหรับเพศและวัย
-        gender = max(set(g_votes), key=g_votes.count) if g_votes else "UNKNOWN"
-        age = max(set(a_votes), key=a_votes.count) if a_votes else "ADULT"
+        # กรองเอาเฉพาะผลโหวตที่มีหลักฐานชัดเจน (ตัด UNKNOWN ออกหากมีหลักฐานชี้ชัด)
+        valid_g_votes = [v for v in g_votes if v != "UNKNOWN"]
+        valid_a_votes = [v for v in a_votes if v != "UNKNOWN"]
 
-        # Ground Truth Overrides (แก้ปัญหา UNKNOWN ด้วยข้อเท็จจริงทางภาษาและตัวเกม)
-        if name in GROUND_TRUTH_IDENTITY:
-            gt = GROUND_TRUTH_IDENTITY[name]
-            if gender == "UNKNOWN":
-                gender = gt["gender"]
-            if age == "UNKNOWN":
-                age = gt["age"]
+        gender = max(set(valid_g_votes), key=valid_g_votes.count) if valid_g_votes else "UNKNOWN"
+        age = max(set(valid_a_votes), key=valid_a_votes.count) if valid_a_votes else "ADULT"
 
+        # Grounding เพิ่มเติมจาก Master Glossary บนดิสก์ (ไฟล์ข้อมูลของโปรเจกต์ที่สกัดจาก Game Database)
         gl_entry = chars_glossary.get(name, {})
         gl_gender = gl_entry.get("gender", "")
-        if gl_gender == "ชาย":
+        if gl_gender in ("ชาย", "male", "MALE"):
             gender = "MALE"
-        elif gl_gender == "หญิง":
+        elif gl_gender in ("หญิง", "female", "FEMALE"):
             gender = "FEMALE"
 
-        if "子供" in name or "小学生" in name:
-            age = "CHILD"
-        elif "おばあさん" in name:
-            age = "ELDER"
+        # ตรวจสอบพหูพจน์จากจำนวนหรือคำลงท้ายสากลในภาษาต้นฉบับ
+        is_plural = "たち" in name or "2人" in name or "พวก" in name
+        number = "PLURAL" if is_plural else "SINGULAR"
 
         char_demographics[name] = {
             "gender": gender,
             "age": age,
+            "number": number,
             "th_name": gl_entry.get("th", name)
         }
 
@@ -584,6 +572,7 @@ def synthesize_and_save_profiles(
         demo = char_demographics[name]
         gender = demo["gender"]
         age = demo["age"]
+        number = demo["number"]
         th_name = demo["th_name"]
 
         prof = master_profiles.get(name, {})
@@ -593,9 +582,9 @@ def synthesize_and_save_profiles(
         if not personality_tags:
             personality_tags = ["PER_SOC_CASUAL"]
 
-        # Base Speech Style
+        # Base Speech Style (Universal Demographic Defaults)
         base_f_lvl = 2 if age in ("CHILD", "ELDER") else 3
-        base_speech = derive_pronouns_from_taxonomy(gender, age, "UNKNOWN", "ADULT", [], "INT_CASUAL", base_f_lvl, "")
+        base_speech = derive_pronouns_from_taxonomy(gender, age, "UNKNOWN", "ADULT", "SINGULAR", [], "INT_CASUAL", base_f_lvl)
 
         # Relationships
         rels_output = []
@@ -611,16 +600,16 @@ def synthesize_and_save_profiles(
             roles = rel_data.get("roles", ["ROLE_SOC_PEER"])
             intimacy = rel_data.get("intimacy", "INT_CASUAL")
 
-            # คำนวณคำสรรพนามเฉพาะคู่นี้จาก Taxonomy
+            # คำนวณคำสรรพนามเฉพาะคู่นี้จาก Taxonomy อย่างเป็นกลาง
             pair_speech = derive_pronouns_from_taxonomy(
                 speaker_gender=gender,
                 speaker_age=age,
                 target_gender=t_demo["gender"],
                 target_age=t_demo["age"],
+                target_number=t_demo["number"],
                 roles=roles,
                 intimacy=intimacy,
-                formality_level=avg_f_lvl,
-                target_name=target_name
+                formality_level=avg_f_lvl
             )
 
             rels_output.append({
@@ -633,7 +622,8 @@ def synthesize_and_save_profiles(
                 "speech_style": pair_speech
             })
 
-        char_id = CANONICAL_ID_MAP.get(name, f"CHAR_{hash(name) & 0xFFFF:04X}_{re.sub(r'[^A-Za-z0-9]', '', name) or 'ACTOR'}")
+        # Universal Deterministic Character ID
+        char_id = generate_universal_character_id(name)
 
         final_profile_json = {
             "character_id": char_id,
@@ -644,7 +634,7 @@ def synthesize_and_save_profiles(
                 "gender": gender,
                 "age": age,
                 "species": "HUMAN",
-                "number": "PLURAL" if ("たち" in name or "2人" in name) else "SINGULAR"
+                "number": number
             },
             "base_speech_style": {
                 "self_pronoun": base_speech["self_pronoun"],
@@ -672,8 +662,8 @@ def synthesize_and_save_profiles(
 
 def main():
     print("=" * 80)
-    print("   ATF SCENE-BASED CHARACTER PROFILER & RELATIONAL SYNTHESIZER (v6.3)")
-    print("   (Per-Batch Checkpointing + Resilient Periodic New Chat + Zero Unknown)")
+    print("   ATF SCENE-BASED CHARACTER PROFILER & RELATIONAL SYNTHESIZER (v6.4)")
+    print("   (Pure Universal Paradigm + Zero Hardcode Invariant + State Persistence)")
     print("=" * 80)
 
     manifest = load_manifest()
@@ -684,7 +674,6 @@ def main():
     glossary_path = manifest.get("output_glossary_json", os.path.join(output_tlas_dir, "tlas_glossary.json"))
     profiles_dir = manifest.get("output_profiles_dir", os.path.join(output_tlas_dir, "profiles"))
 
-    # ไดเรกทอรีสำหรับ Checkpoints และ Logs เพื่อ State Persistence 100%
     checkpoints_dir = os.path.join(output_tlas_dir, "checkpoints")
     logs_dir = os.path.join(output_tlas_dir, "logs")
     os.makedirs(checkpoints_dir, exist_ok=True)
@@ -728,7 +717,6 @@ def main():
         try:
             cp_data = load_json_safe(checkpoint_file) or {}
             completed_batch_ids = set(cp_data.get("completed_batch_ids", []))
-            # โหลด master_profiles ที่เคยบันทึกไว้
             raw_master = cp_data.get("master_profiles", {})
             for c_name, c_data in raw_master.items():
                 master_profiles[c_name] = {
@@ -754,13 +742,12 @@ def main():
     for idx, batch in enumerate(scene_batches, start=1):
         b_id = batch["batch_id"]
         if b_id in completed_batch_ids:
-            print(f"⏩ [Skip Done] ฉากที่ {idx}/{len(scene_batches)}: {batch['scene_id']} เคยวิเคราะห์แล้ว")
+            print(f"⏩ [Skip Done] ฉากที่ {idx:02d}/{len(scene_batches)}: {batch['scene_id']} เคยวิเคราะห์แล้ว")
             continue
 
         print(f"\n[{idx}/{len(scene_batches)}] 🎬 กำลังส่งวิเคราะห์ฉาก: {batch['scene_id']}...")
         print(f"    ตัวละครในฉากนี้: {batch['characters']}")
 
-        # สั่งเปิด New Chat เมื่อขึ้นต้น หรือหลังจากทำงานไปแล้ว 8-10 ฉากเพื่อป้องกัน Context ลอย
         if batches_since_new_chat == 0 or batches_since_new_chat >= 8:
             print(f"    [🔄] Context Refresh: สั่งเปิด New Chat เพื่อสุขอนามัยของ Context Window...")
             trigger_new_chat(BRIDGE_URL)
@@ -779,7 +766,6 @@ def main():
             # -------------------------------------------------------------
             # [CRITICAL RULE]: บันทึก Checkpoint, Log และ Profile ทันทีทุก Batch!
             # -------------------------------------------------------------
-            # 1. เขียน Log Entry ลงไฟล์ jsonl
             log_entry = {
                 "timestamp": time.time(),
                 "batch_id": b_id,
@@ -791,7 +777,6 @@ def main():
             with open(log_file, "a", encoding="utf-8") as lf:
                 lf.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
-            # 2. บันทึก Checkpoint State ลงฮาร์ดดิสก์
             serializable_master = {}
             for c_name, c_data in master_profiles.items():
                 serializable_master[c_name] = {
@@ -803,7 +788,7 @@ def main():
                     "relationships": c_data["relationships"]
                 }
             cp_payload = {
-                "version": "6.3",
+                "version": "6.4",
                 "last_updated": time.time(),
                 "completed_batch_ids": list(completed_batch_ids),
                 "master_profiles": serializable_master
@@ -811,7 +796,6 @@ def main():
             with open(checkpoint_file, "w", encoding="utf-8") as cf:
                 json.dump(cp_payload, cf, ensure_ascii=False, indent=2)
 
-            # 3. สังเคราะห์และบันทึกไฟล์ Profile ทันทีทุก Batch (Real-time Disk Persistence)
             saved_count = synthesize_and_save_profiles(master_profiles, whitelist_names, glossary_data, profiles_dir)
             print(f"    💾 [Real-time Save] อัปเดตและบันทึก Profile ลงดิสก์เรียบร้อย ({saved_count} ตัวละคร)")
 

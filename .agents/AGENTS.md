@@ -35,6 +35,7 @@
    - **[RULE_USER_TERMINAL_ONLY]:** ห้ามแอบรันโค้ดเองในเทอร์มินัล ให้จัดเตรียมคำสั่งทั้ง PowerShell และ CMD ให้ผู้ใช้เป็นผู้สั่งรัน
    - **[RULE_SYSTEM_PRINCIPLES]:** ยึดมั่น State Persistence (Checkpointing), Adaptive Resilience, No Timeout, และ No Skip Guarantee
    - **[RULE_UNIVERSAL_PARADIGM]:** โค้ดและเครื่องมือต้องเป็น Universal Framework รองรับทุก Game Engine ในอนาคต
+   - **[RULE_PRE_DELIVERY_COMPLIANCE_AUDIT]:** ตรวจสอบซ้ำก่อนรายงานผลการทำงานทุกครั้ง และรายงานว่าทำไมแต่ละส่วนถึงไม่ผิดกฎ Rule ในคำตอบเสมอ
 2. **[[zero-hardcode-and-hallucination.md]](file:///d:/Agentic%20Translation%20Framework%20(ATF)%20Project/.agents/rules/zero-hardcode-and-hallucination.md):**
    - **[RULE_ZERO_HARDCODE]:** ห้ามคิดหรือเดาเอาเองจากชื่อตัวละครว่าเป็นหญิง ชาย หรือนักเลง ต้องอ้างอิงหลักฐานจริง ห้ามสร้าง Default Polite Male Trap
    - **[RULE_ZERO_HALLUCINATION]:** ห้ามหลอน ห้ามคิดเอง ทุกอย่างต้องอ้างอิงข้อมูลจริงบนดิสก์
